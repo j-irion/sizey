@@ -2,6 +2,8 @@ import logging
 import sys
 import time
 import warnings
+import argparse
+import os
 
 import numpy as np
 import pandas as pd
@@ -24,6 +26,18 @@ warnings.filterwarnings(action='ignore', category=UserWarning)
 warnings.filterwarnings(action='ignore', category=ConvergenceWarning)
 
 logging.basicConfig(level=logging.DEBUG)
+
+
+def parse_bool(value: str) -> bool:
+    """Parse boolean values for CLI arguments."""
+    true_set = {"true", "1", "yes", "y"}
+    false_set = {"false", "0", "no", "n"}
+    lower = value.lower()
+    if lower in true_set:
+        return True
+    if lower in false_set:
+        return False
+    raise argparse.ArgumentTypeError("Expected a boolean value for softmax")
 
 
 def is_numeric(value):
@@ -177,127 +191,136 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
     return wastage_in_gb_under + wastage_in_gb_over
 
 
-df2 = getTasksFromCSV(sys.argv[1])
-unique_tasks = df2['process'].unique()
-sizey_alpha = float(sys.argv[2])
-use_softmax = sys.argv[3] in "True"
-seed = int(sys.argv[5])
+def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: int) -> None:
+    df2 = getTasksFromCSV(filename)
+    unique_tasks = df2['process'].unique()
 
-error_metric = sys.argv[4]
+    sizey_alpha = alpha
+    use_softmax = softmax
+    wf_name = filename.split("_")[1].split('.')[0]
 
-logging.debug(use_softmax)
-if (sizey_alpha > 1.0) | (sizey_alpha < 0.0):
-    sys.exit()
+    for task in unique_tasks:
 
-wf_name = sys.argv[1].split("_")[1].split('.')[0]
+        new_dataF = df2[df2['process'] == task].copy()
+        new_dataF['rss'] = pd.to_numeric(new_dataF['rss'], errors='coerce')
+        new_dataF['input_size'] = pd.to_numeric(new_dataF['input_size'], errors='coerce')
+        new_dataF['memory'] = pd.to_numeric(new_dataF['memory'], errors='coerce')
+        new_dataF['peak_rss'] = pd.to_numeric(new_dataF['peak_rss'], errors='coerce')
+        new_dataF = new_dataF[new_dataF['rss'] > 0]  # Filter out failed measurements
 
-for task in unique_tasks:
+        # Remove task with fewer task instances, can be adjusted to filter out more tasks.
+        if (len(new_dataF) < 34):
+            continue
 
-    new_dataF = df2[df2['process'] == task].copy()
-    new_dataF['rss'] = pd.to_numeric(new_dataF['rss'], errors='coerce')
-    new_dataF['input_size'] = pd.to_numeric(new_dataF['input_size'], errors='coerce')
-    new_dataF['memory'] = pd.to_numeric(new_dataF['memory'], errors='coerce')
-    new_dataF['peak_rss'] = pd.to_numeric(new_dataF['peak_rss'], errors='coerce')
-    new_dataF = new_dataF[new_dataF['rss'] > 0]  # Filter out failed measurements
+        # Measured runtime values of 0 indicate that a task instance has run too short to measure its resource usage. Therefore, the instance is removed.
+        if (new_dataF['realtime'] == 0).any():
+            continue
 
-    # Remove task with fewer task instances, can be adjusted to filter out more tasks.
-    if (len(new_dataF) < 34):
-        continue
+        x2 = new_dataF['input_size'].to_frame()
+        y2 = new_dataF['rss']
+        user_estimates = new_dataF['memory']
 
-    # Measured runtime values of 0 indicate that a task instance has run too short to measure its resource usage. Therefore, the instance is removed.
-    if (new_dataF['realtime'] == 0).any():
-        continue
+        runtimes = new_dataF['realtime']
 
-    x2 = new_dataF['input_size'].to_frame()
-    y2 = new_dataF['rss']
-    user_estimates = new_dataF['memory']
+        # The test size can be adjusted in order to define the historical data available.
+        X_train, X_test, y_train, y_test, runtime_train, runtime_test, user_estimates_train, user_estimates_test = train_test_split(
+          x2, y2, runtimes, user_estimates,
+            test_size=0.7, random_state=seed)
 
-    runtimes = new_dataF['realtime']
+        witt_percentile_predictor = WittPercentilePredictor()
+        witt_percentile_predictor.initial_model_training(X_train, y_train)
 
-    # The test size can be adjusted in order to define the historical data available.
-    X_train, X_test, y_train, y_test, runtime_train, runtime_test, user_estimates_train, user_estimates_test = train_test_split(
-        x2, y2, runtimes, user_estimates,
-        test_size=0.7, random_state=seed)
+        witt_lr_predictor_std = WittRegressionPredictor(OFFSET_STRATEGY.STD)
+        witt_lr_predictor_std.initial_model_training(X_train, y_train)
 
-    witt_percentile_predictor = WittPercentilePredictor()
-    witt_percentile_predictor.initial_model_training(X_train, y_train)
+        witt_lr_predictor_stdunder = WittRegressionPredictor(OFFSET_STRATEGY.STDUNDER)
+        witt_lr_predictor_stdunder.initial_model_training(X_train, y_train)
 
-    witt_lr_predictor_std = WittRegressionPredictor(OFFSET_STRATEGY.STD)
-    witt_lr_predictor_std.initial_model_training(X_train, y_train)
+        tovar_predictor = TovarPredictor()
+        tovar_predictor.initial_model_training(y_train, runtime_train)
 
-    witt_lr_predictor_stdunder = WittRegressionPredictor(OFFSET_STRATEGY.STDUNDER)
-    witt_lr_predictor_stdunder.initial_model_training(X_train, y_train)
+        run_online_and_calculate_wastage("Witt-LR", task, 'Default', OFFSET_STRATEGY.STD.name, witt_lr_predictor_std,
+                                         X_test, y_test,
+                                         runtime_test, user_estimates_test, wf_name,
+                                         sizey_alpha,
+                                         use_softmax, error_metric, seed)
 
-    tovar_predictor = TovarPredictor()
-    tovar_predictor.initial_model_training(y_train, runtime_train)
+        run_online_and_calculate_wastage("Tovar", task, 'Default', 'Default', tovar_predictor,
+                                         X_test, y_test, runtime_test, user_estimates_test,
+                                         wf_name, sizey_alpha, use_softmax,
+                                         error_metric, seed)
 
+        run_online_and_calculate_wastage("Witt-Percentile", task, 'Default', 'Default', witt_percentile_predictor,
+                                         X_test, y_test, runtime_test, user_estimates_test,
+                                         wf_name,
+                                         sizey_alpha, use_softmax, error_metric, seed)
 
-    run_online_and_calculate_wastage("Witt-LR", task, 'Default', OFFSET_STRATEGY.STD.name, witt_lr_predictor_std,
-                                     X_test, y_test,
-                                     runtime_test, user_estimates_test, wf_name,
-                                     sizey_alpha,
-                                     use_softmax, error_metric, seed)
+        run_online_and_calculate_wastage("Witt-LR", task, 'Default', OFFSET_STRATEGY.STDUNDER.name,
+                                         witt_lr_predictor_stdunder, X_test, y_test,
+                                         runtime_test, user_estimates_test, wf_name,
+                                         sizey_alpha,
+                                         use_softmax, error_metric, seed)
 
-    run_online_and_calculate_wastage("Tovar", task, 'Default', 'Default', tovar_predictor,
-                                     X_test, y_test, runtime_test, user_estimates_test,
-                                     wf_name, sizey_alpha, use_softmax,
-                                     error_metric, seed)
+        filtered_original_data_for_default_comparison = new_dataF[new_dataF.index.isin(y_test.index)]
 
-    run_online_and_calculate_wastage("Witt-Percentile", task, 'Default', 'Default', witt_percentile_predictor,
-                                     X_test, y_test, runtime_test, user_estimates_test,
-                                     wf_name,
-                                     sizey_alpha, use_softmax, error_metric, seed)
+        if not check_substring_in_csv(wf_name, sizey_alpha, use_softmax, error_metric,
+                                      "Workflow-Presets", task, "Default", "Default", seed):
+            write_result_to_csv("Workflow-Presets", "Default", "Default", task,
+                                (filtered_original_data_for_default_comparison["memory"] -
+                                 filtered_original_data_for_default_comparison["peak_rss"]).sum(),
+                                str(byte_to_mb((filtered_original_data_for_default_comparison["memory"] -
+                                                filtered_original_data_for_default_comparison["peak_rss"]).sum())),
+                                str(byte_to_gigabyte((filtered_original_data_for_default_comparison["memory"] -
+                                                      filtered_original_data_for_default_comparison[
+                                                        "peak_rss"]).sum())),
+                                str(((filtered_original_data_for_default_comparison["memory"] -
+                                      filtered_original_data_for_default_comparison["peak_rss"]) * 0.000001 *
+                                     filtered_original_data_for_default_comparison[
+                                       "realtime"] / 3600000.0).sum()),
+                                str(((filtered_original_data_for_default_comparison["memory"] -
+                                      filtered_original_data_for_default_comparison["peak_rss"]) * 0.000000001 *
+                                     filtered_original_data_for_default_comparison[
+                                       "realtime"] / 3600000.0).sum()),
+                                0,
+                                filtered_original_data_for_default_comparison["realtime"].sum() / 3600000.0,
+                                len(filtered_original_data_for_default_comparison),
+                                wf_name, 0,
+                                (filtered_original_data_for_default_comparison["realtime"] / 3600000.0 *
+                                 filtered_original_data_for_default_comparison["peak_rss"] * 0.000000001).sum() /
+                                ((filtered_original_data_for_default_comparison["realtime"] / 3600000.0 *
+                                  filtered_original_data_for_default_comparison["peak_rss"] * 0.000000001).sum() +
+                                 ((filtered_original_data_for_default_comparison["memory"] -
+                                   filtered_original_data_for_default_comparison["peak_rss"]) * 0.000000001 *
+                                  filtered_original_data_for_default_comparison["realtime"] / 3600000.0).sum()
+                                 ) * 100, sizey_alpha, use_softmax, {}, error_metric, "-1", seed)
 
-    run_online_and_calculate_wastage("Witt-LR", task, 'Default', OFFSET_STRATEGY.STDUNDER.name,
-                                     witt_lr_predictor_stdunder, X_test, y_test,
-                                     runtime_test, user_estimates_test, wf_name,
-                                     sizey_alpha,
-                                     use_softmax, error_metric, seed)
+        # You can configure multiple/all Sizey configurations. Currently, it uses the paper default
+        for error_strat in ERROR_STRATEGY:
+            for offset_strat in OFFSET_STRATEGY:
+                if (offset_strat.name == "DYNAMIC") & (error_strat.name == "MAX_EVER_OBSERVED"):
+                    sizey = Sizey(X_train, y_train.values.reshape(-1, 1), sizey_alpha, offset_strat, 0.05,
+                                  error_strat, use_softmax, error_metric)
+                    run_online_and_calculate_wastage("Sizey", task, error_strat.name, offset_strat.name, sizey, X_test,
+                                                     y_test, runtime_test, user_estimates_test,
+                                                     wf_name,
+                                                     sizey_alpha, use_softmax, error_metric, seed)
 
-    filtered_original_data_for_default_comparison = new_dataF[new_dataF.index.isin(y_test.index)]
-
-    if not check_substring_in_csv(wf_name, sizey_alpha, use_softmax, error_metric,
-                                  "Workflow-Presets", task, "Default", "Default", seed):
-        write_result_to_csv("Workflow-Presets", "Default", "Default", task,
-                            (filtered_original_data_for_default_comparison["memory"] -
-                             filtered_original_data_for_default_comparison["peak_rss"]).sum(),
-                            str(byte_to_mb((filtered_original_data_for_default_comparison["memory"] -
-                                            filtered_original_data_for_default_comparison["peak_rss"]).sum())),
-                            str(byte_to_gigabyte((filtered_original_data_for_default_comparison["memory"] -
-                                                  filtered_original_data_for_default_comparison[
-                                                      "peak_rss"]).sum())),
-                            str(((filtered_original_data_for_default_comparison["memory"] -
-                                  filtered_original_data_for_default_comparison["peak_rss"]) * 0.000001 *
-                                 filtered_original_data_for_default_comparison[
-                                     "realtime"] / 3600000.0).sum()),
-                            str(((filtered_original_data_for_default_comparison["memory"] -
-                                  filtered_original_data_for_default_comparison["peak_rss"]) * 0.000000001 *
-                                 filtered_original_data_for_default_comparison[
-                                     "realtime"] / 3600000.0).sum()),
-                            0,
-                            filtered_original_data_for_default_comparison["realtime"].sum() / 3600000.0,
-                            len(filtered_original_data_for_default_comparison),
-                            wf_name, 0,
-                            (filtered_original_data_for_default_comparison["realtime"] / 3600000.0 *
-                             filtered_original_data_for_default_comparison["peak_rss"] * 0.000000001).sum() /
-                            ((filtered_original_data_for_default_comparison["realtime"] / 3600000.0 *
-                              filtered_original_data_for_default_comparison["peak_rss"] * 0.000000001).sum() +
-                             ((filtered_original_data_for_default_comparison["memory"] -
-                               filtered_original_data_for_default_comparison["peak_rss"]) * 0.000000001 *
-                              filtered_original_data_for_default_comparison["realtime"] / 3600000.0).sum()
-                             ) * 100, sizey_alpha, use_softmax, {}, error_metric, "-1", seed)
-
-    # You can configure multiple/all Sizey configurations. Currently, it uses the paper default
-    for error_strat in ERROR_STRATEGY:
-        for offset_strat in OFFSET_STRATEGY:
-            if (offset_strat.name == "DYNAMIC") & (error_strat.name == "MAX_EVER_OBSERVED"):
-                sizey = Sizey(X_train, y_train.values.reshape(-1, 1), sizey_alpha, offset_strat, 0.05,
-                              error_strat, use_softmax, error_metric)
-                run_online_and_calculate_wastage("Sizey", task, error_strat.name, offset_strat.name, sizey, X_test,
-                                                 y_test, runtime_test, user_estimates_test,
-                                                 wf_name,
-                                                 sizey_alpha, use_softmax, error_metric, seed)
+    main_witt_wastage(wf_name, seed, error_metric, sizey_alpha, use_softmax)
 
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run Sizey memory predictions")
+    parser.add_argument("filename", help="CSV workflow file, e.g. ./data/trace_methylseq.csv")
+    parser.add_argument("alpha", type=float, help="Alpha value between 0.0 and 1.0")
+    parser.add_argument("softmax", type=parse_bool, help="Enable softmax ensemble (True/False)")
+    parser.add_argument("error_metric", choices=["smoothed_mape", "neg_mean_squared_error"],
+                        help="Error metric for model training")
+    parser.add_argument("seed", type=int, help="Random seed for train/test split")
+    args = parser.parse_args()
 
-main_witt_wastage(wf_name, seed, error_metric, sizey_alpha, use_softmax)
+    if not os.path.isfile(args.filename):
+      parser.error(f"File '{args.filename}' does not exist")
+    if not 0.0 <= args.alpha <= 1.0:
+      parser.error("alpha must be between 0.0 and 1.0")
+
+    main(args.filename, args.alpha, args.softmax, args.error_metric, args.seed)
