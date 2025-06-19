@@ -88,8 +88,8 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
             memory_prediction_from_method = memory_prediction_from_method[0][0]
             raw_memory_prediction_from_method = raw_memory_prediction_from_method[0][0]
 
-        print(method_name)
-        print("Prediction: " + str(memory_prediction_from_method))
+        logging.debug(method_name)
+        logging.debug("Prediction: " + str(memory_prediction_from_method))
         predictions.append(memory_prediction_from_method)
         raw_prediction = raw_memory_prediction_from_method
 
@@ -158,7 +158,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
         else:
             prediction_method.update_model(entry, runtime)
 
-        print("Method: " + method_name + " predicted " + str(
+        logging.debug("Method: " + method_name + " predicted " + str(
             predictions) + " with an actual memory consumption of " + str(entry) + " and a runtime of " + str(runtime))
         write_single_task_to_csv(method_name, error_strat, offset_strat, workflow, error_metric, use_softmax, taskname,
                                  task_iteration_gbh, predictions, entry, raw_prediction,
@@ -185,7 +185,7 @@ seed = int(sys.argv[5])
 
 error_metric = sys.argv[4]
 
-print(use_softmax)
+logging.debug(use_softmax)
 if (sizey_alpha > 1.0) | (sizey_alpha < 0.0):
     sys.exit()
 

@@ -9,6 +9,7 @@ from functools import partial
 from typing import Callable, List, Optional
 import pandas as pd
 import numpy as np
+import logging
 import scipy.optimize as spo
 import scipy.stats as sps
 import statsmodels.formula.api as smf
@@ -60,7 +61,7 @@ class LowWastageRegression:
             self.training_data = self.data.sample(frac=0.7, random_state=i)
             self.models.append(self.__train__(optimize_base=False))
             # print(self.models[1.0][0].slope)
-        print(self.models)
+        logging.debug(self.models)
 
     def predict(self, data: pd.DataFrame):
         df = data.copy()
@@ -272,7 +273,7 @@ def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float,
                             REL_TTF = 1.0
                             BASE = 2
                             MIN_ALLOC = 0.01
-                            print("Task: " + task)
+                            logging.debug("Task: " + task)
                             df = df_all_tasks[df_all_tasks['process'] == task]
 
                             if (len(df) < 34):
@@ -288,10 +289,10 @@ def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float,
                             lwr = LowWastageRegression(training, predictor_column='input_size', resource_column='peak_rss',
                                                        run_time_column='realtime', relative_time_to_failure=1., min_allocation=0.01)
 
-                            print("best_params: {0}".format(lwr.model))
-                            print("maq: {:.2f}% failures: {:.2f}%".format(lwr.quality.maq * 100, lwr.quality.failures / df.size * 100))
+                            logging.debug("best_params: {0}".format(lwr.model))
+                            logging.debug("maq: {:.2f}% failures: {:.2f}%".format(lwr.quality.maq * 100, lwr.quality.failures / df.size * 100))
                             time_needed = time.time() - before
-                            print("\ntime needed: {0}".format(time_needed))
+                            logging.debug("\ntime needed: {0}".format(time_needed))
 
                             evaluation = df.drop(training.index)
                             evaluation['first_allocation'] = lwr.predict(evaluation)
@@ -299,7 +300,7 @@ def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float,
 
                             w = Wastage.exponential(evaluation, 1.0, resource_column='peak_rss', first_allocation_column='first_allocation',
                                                     run_time_column='realtime', workflow=workflow)
-                            print(w)
+                            logging.debug(w)
 
                             for index, row in evaluation.iterrows():
                                 write_single_task_to_csv("Witt-Ice", "Default", "Default", workflow, "smoothed_mape", True,

@@ -55,9 +55,9 @@ class Sizey(PredictionMethod):
         self.default_offset = default_offset
         self.error_strategy = error_strategy
         self.max_mem = max(y_train)[0]
-        print(y_train)
+        logging.debug(y_train)
         self.max_input_size = X_train.values[np.where(y_train == self.max_mem)[0][0]][0]
-        print(self.max_input_size)
+        logging.debug(self.max_input_size)
         self.min_mem = min(y_train)[0]
         self.X_full = X_train.values
         self.y_full = y_train
@@ -100,7 +100,7 @@ class Sizey(PredictionMethod):
         self.pred_err_rf.append(((y_test - prediction_rf) / y_test).flatten()[0])
 
         if abs(((y_test - prediction_rf) / y_test).flatten()[0]) > 0.7:
-            print("Jump into debug")
+            logging.debug("Jump into debug")
 
         offset_knn = self._get_offset(self.offset_strategy, self.default_offset, self.pred_err_knn, self.knnPredictor)
         prediction_knn = self.knnPredictor.predict_task(X_test)
@@ -117,7 +117,7 @@ class Sizey(PredictionMethod):
             beta * raq_nn) / sum_raq_softmax) + offset_rf * (np.exp(
             beta * raq_rf) / sum_raq_softmax )+ offset_knn * (np.exp(beta * raq_knn) / sum_raq_softmax)
 
-        print(y_pred_softmax)
+        logging.debug(y_pred_softmax)
 
         memToPredict = -1
         raw_prediction = -1
@@ -185,7 +185,7 @@ class Sizey(PredictionMethod):
                                   "original": predicted,
                                   "peak_memory": -1, "retry_strategy": self.error_strategy,
                                   "retry_number": retry_number})
-        print("Failures" + str(self.failures))
+        logging.debug("Failures" + str(self.failures))
         return next_pred
 
     def _calculate_accuracy_score(self) -> Tuple[float, float, float, float]:
@@ -281,8 +281,8 @@ class Sizey(PredictionMethod):
 
     def _get_next_pred_for_underpred(self, input_size: float, prediction: float, user_estimate: float) -> float:
 
-        print(input_size)
-        print(self.max_input_size)
+        logging.debug(input_size)
+        logging.debug(self.max_input_size)
 
         if self.error_strategy == ERROR_STRATEGY.DOUBLE:
             return prediction * 2
@@ -290,7 +290,7 @@ class Sizey(PredictionMethod):
             if self.max_mem <= prediction:
                 return prediction * 2
             elif (self.kedall_corr.correlation > 0.25) & (input_size > self.max_input_size):
-                print("Kicked in")
+                logging.debug("Kicked in")
                 return prediction * 2
             elif self.max_mem < prediction * 1.05:
                 return prediction * 2
@@ -318,7 +318,7 @@ class Sizey(PredictionMethod):
                 min_failures = failures
                 min_offset_strat = offset_strat
 
-        print(min_offset_strat.name)
+        logging.debug(min_offset_strat.name)
         return self._get_offset(min_offset_strat, 0.05, prediction_error, predictor)
 
     def next_or_same_power_of_two(self, n):
@@ -368,7 +368,7 @@ class Sizey(PredictionMethod):
                 min_wastage = wastage
                 min_offset_strat = offset_strat
 
-        print(min_offset_strat.name)
+        logging.debug(min_offset_strat.name)
         return self._get_offset(min_offset_strat, 0.05, prediction_error, predictor)
 
     def get_number_subModels(self) -> dict[str, int]:
