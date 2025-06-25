@@ -43,6 +43,22 @@ class PredictionModel(metaclass=ABCMeta):
         self.y_train_full = None
         self.model_error = None
 
+    def _ensure_column_vector(self, array_like: Union[pd.Series, np.ndarray, list]) -> np.ndarray:
+        """
+        Converts the input array-like object into a numpy array shaped as a column vector.
+
+        This method ensures that the input, whether it is a pandas Series, a 1-D numpy array, or a list,
+        is transformed into a two-dimensional numpy array with a single column. This format is required
+        by scikit-learn for certain operations.
+
+        :param array_like: Input data to be converted. Can be a pandas Series, numpy array, or list.
+        :return: A numpy array reshaped into a column vector (2-D array with shape (n, 1)).
+        """
+        arr = np.asarray(array_like)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        return arr
+
     def initial_model_training(self, X_train, y_train) -> None:
         """
         Initializes the model with training data.

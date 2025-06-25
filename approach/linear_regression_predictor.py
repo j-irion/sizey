@@ -40,10 +40,10 @@ class LinearPredictor(PredictionModel):
         :param X_train: Training features.
         :param y_train: Training labels.
         """
-        self.X_train_full = X_train
-        self.y_train_full = y_train
+        self.X_train_full = self._ensure_column_vector(X_train)
+        self.y_train_full = self._ensure_column_vector(y_train)
 
-        self._select_best_model(X_train, y_train)
+        self._select_best_model(self._ensure_column_vector(X_train), self._ensure_column_vector(y_train))
 
     def predict_task(self, task_features: pd.Series) -> float:
         """
@@ -53,8 +53,9 @@ class LinearPredictor(PredictionModel):
 
         :return: Predicted value for the task.
         """
-        task_features_scaled = self.train_X_scaler.transform(task_features.values.reshape(-1, 1))
-        return self.train_y_scaler.inverse_transform(self.regressor.predict(task_features_scaled).reshape(-1, 1))
+        task_features_scaled = self.train_X_scaler.transform(self._ensure_column_vector(task_features))
+        preds = self.regressor.predict(task_features_scaled)
+        return self.train_y_scaler.inverse_transform(self._ensure_column_vector(preds))
 
     def predict_tasks(self, taskDataframe: pd.DataFrame) -> np.ndarray:
         """
@@ -66,7 +67,8 @@ class LinearPredictor(PredictionModel):
         """
         taskDataframe_scaled = self.train_X_scaler.transform(taskDataframe)
 
-        return self.train_y_scaler.inverse_transform(self.regressor.predict(taskDataframe_scaled).reshape(-1, 1))
+        preds = self.regressor.predict(taskDataframe_scaled)
+        return self.train_y_scaler.inverse_transform(self._ensure_column_vector(preds))
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
         """
@@ -76,8 +78,8 @@ class LinearPredictor(PredictionModel):
         :param y_train: New training labels.
         """
         # Append the newly incoming data to maintain all historical data
-        self.X_train_full = np.concatenate((self.X_train_full, [X_train]))
-        self.y_train_full = np.concatenate((self.y_train_full, np.array([y_train]).reshape(-1, 1)))
+        self.X_train_full = np.concatenate((self.X_train_full, self._ensure_column_vector(X_train)))
+        self.y_train_full = np.concatenate((self.y_train_full, self._ensure_column_vector([y_train])))
 
         # Scaling of data with all historical data
         self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
@@ -114,7 +116,7 @@ class LinearPredictor(PredictionModel):
 
         # Scale Features
         X_train_scaled = self.train_X_scaler.fit_transform(X_train)
-        y_train_scaled = self.train_y_scaler.fit_transform(y_train)
+        y_train_scaled = self.train_y_scaler.fit_transform(self._ensure_column_vector(y_train))
 
         smoothed_mape_scorer = make_scorer(self.smoothed_mape, greater_is_better=True)
 

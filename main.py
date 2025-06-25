@@ -277,7 +277,7 @@ def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: in
         for error_strat in ERROR_STRATEGY:
             for offset_strat in OFFSET_STRATEGY:
                 if (offset_strat.name == "DYNAMIC") & (error_strat.name == "MAX_EVER_OBSERVED"):
-                    sizey = Sizey(X_train, y_train.values.reshape(-1, 1), sizey_alpha, offset_strat, 0.05,
+                    sizey = Sizey(X_train, y_train, sizey_alpha, offset_strat, 0.05,
                                   error_strat, use_softmax, error_metric)
                     run_online_and_calculate_wastage("Sizey", task, error_strat.name, offset_strat.name, sizey, X_test,
                                                      y_test, runtime_test, user_estimates_test,

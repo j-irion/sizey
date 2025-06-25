@@ -87,14 +87,15 @@ class Sizey(PredictionMethod):
         self.randomForestPredictor = RandomForestPredictor(workflow_name="Test", task_name="Test",
                                                            err_metr=error_metric)
         self.knnPredictor = KNNPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric)
+        y_train = np.asarray(y_train).ravel()
         self._initial_model_training(X_train, y_train)
         self.alpha = alpha
         self.offset_strategy = offset_strategy
         self.default_offset = default_offset
         self.error_strategy = error_strategy
-        self.max_mem = max(y_train)[0]
-        self.max_input_size = X_train.values[np.where(y_train == self.max_mem)[0][0]][0]
-        self.min_mem = min(y_train)[0]
+        self.max_mem = np.max(y_train)
+        self.max_input_size = X_train.values[np.argmax(y_train)][0]
+        self.min_mem = np.min(y_train)
         self.X_full = X_train.values
         self.y_full = y_train
         self.kedall_corr = stats.kendalltau(self.X_full, self.y_full)
