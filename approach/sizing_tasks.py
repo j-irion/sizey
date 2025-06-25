@@ -93,9 +93,7 @@ class Sizey(PredictionMethod):
         self.default_offset = default_offset
         self.error_strategy = error_strategy
         self.max_mem = max(y_train)[0]
-        logging.debug(y_train)
         self.max_input_size = X_train.values[np.where(y_train == self.max_mem)[0][0]][0]
-        logging.debug(self.max_input_size)
         self.min_mem = min(y_train)[0]
         self.X_full = X_train.values
         self.y_full = y_train
@@ -169,7 +167,6 @@ class Sizey(PredictionMethod):
             beta * raq_nn) / sum_raq_softmax) + offset_rf * (np.exp(
             beta * raq_rf) / sum_raq_softmax )+ offset_knn * (np.exp(beta * raq_knn) / sum_raq_softmax)
 
-        logging.debug(y_pred_softmax)
 
         memToPredict = -1
         raw_prediction = -1
@@ -393,16 +390,12 @@ class Sizey(PredictionMethod):
 
         :return: Adjusted prediction value based on the error strategy.
         """
-        logging.debug(input_size)
-        logging.debug(self.max_input_size)
-
         if self.error_strategy == ERROR_STRATEGY.DOUBLE:
             return prediction * 2
         elif self.error_strategy == ERROR_STRATEGY.MAX_EVER_OBSERVED:
             if self.max_mem <= prediction:
                 return prediction * 2
             elif (self.kedall_corr.correlation > 0.25) & (input_size > self.max_input_size):
-                logging.debug("Kicked in")
                 return prediction * 2
             elif self.max_mem < prediction * 1.05:
                 return prediction * 2
@@ -437,7 +430,6 @@ class Sizey(PredictionMethod):
                 min_failures = failures
                 min_offset_strat = offset_strat
 
-        logging.debug(min_offset_strat.name)
         return self._get_offset(min_offset_strat, 0.05, prediction_error, predictor)
 
     def next_or_same_power_of_two(self, n):
@@ -500,7 +492,6 @@ class Sizey(PredictionMethod):
                 min_wastage = wastage
                 min_offset_strat = offset_strat
 
-        logging.debug(min_offset_strat.name)
         return self._get_offset(min_offset_strat, 0.05, prediction_error, predictor)
 
     def get_number_subModels(self) -> dict[str, int]:

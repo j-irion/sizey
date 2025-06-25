@@ -25,7 +25,11 @@ warnings.filterwarnings(action='ignore', category=DataConversionWarning)
 warnings.filterwarnings(action='ignore', category=UserWarning)
 warnings.filterwarnings(action='ignore', category=ConvergenceWarning)
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 
 def parse_bool(value: str) -> bool:
@@ -100,7 +104,6 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
             memory_prediction_from_method = memory_prediction_from_method[0][0]
             raw_memory_prediction_from_method = raw_memory_prediction_from_method[0][0]
 
-        logging.debug(method_name)
         logging.debug("Prediction: " + str(memory_prediction_from_method))
         predictions.append(memory_prediction_from_method)
         raw_prediction = raw_memory_prediction_from_method
@@ -293,7 +296,6 @@ if __name__ == "__main__":
                         help="Error metric for model training")
     parser.add_argument("seed", type=int, help="Random seed for train/test split")
     args = parser.parse_args()
-    print(args)
 
     if not os.path.isfile(args.filename):
       parser.error(f"File '{args.filename}' does not exist")

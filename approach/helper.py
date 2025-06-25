@@ -71,8 +71,6 @@ def check_substring_in_csv(workflow, alpha, use_softmax, error_metric, method_na
         for row in reader:
             # Ensure the row has enough columns
             substring = method_name + "," + error_strategy + "," + offset_strategy + "," + taskname + ","
-            logging.debug(substring)
-            logging.debug(row)
             if (method_name in row[0]) & (error_strategy in row[1]) & (offset_strategy in row[2]) & (
                     taskname in row[3]):
                 return True

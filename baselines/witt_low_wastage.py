@@ -436,7 +436,6 @@ def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float,
 
                             w = Wastage.exponential(evaluation, 1.0, resource_column='peak_rss', first_allocation_column='first_allocation',
                                                     run_time_column='realtime', workflow=workflow)
-                            logging.debug(w)
 
                             for index, row in evaluation.iterrows():
                                 write_single_task_to_csv("Witt-Ice", "Default", "Default", workflow, "smoothed_mape", True,
