@@ -41,6 +41,7 @@ def parse_bool(value: str) -> bool:
 
 
 def is_numeric(value):
+    """Check if a value is numeric."""
     try:
         float(value)
         return True
@@ -53,6 +54,9 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
                                      y_test_inner, additionalTime, user_estimate_mem, workflow: str,
                                      alpha: float, use_softmax: bool,
                                      error_metric: str, seed: int):
+    """
+    Run the online prediction method and calculate wastage metrics.
+    """
     usage = 0
     failures = 0
     wastage_in_bytes_over = 0

@@ -16,8 +16,29 @@ simplefilter("ignore", category=ConvergenceWarning)
 
 
 class RandomForestPredictor(PredictionModel):
+    """
+    RandomForestPredictor is a class that implements a machine learning model for regression tasks using Random Forest.
+
+    This class extends the `PredictionModel` base class and provides methods for training, predicting, and updating
+    the Random Forest model. It also includes functionality for selecting the best model based on specified error metrics.
+
+    Attributes:
+        X_train_full (np.ndarray): Historical training features.
+        y_train_full (np.ndarray): Historical training labels.
+        train_X_scaler (MinMaxScaler): Scaler for normalizing training features.
+        train_y_scaler (MinMaxScaler): Scaler for normalizing training labels.
+        regressor (RandomForestRegressor): Trained Random Forest model.
+        model_error (float): Error score of the best model.
+        err_metr (str): Error metric used for model selection.
+    """
 
     def initial_model_training(self, X_train, y_train) -> None:
+        """
+        Initializes the Random Forest model with training data.
+
+        :param X_train: Training features.
+        :param y_train: Training labels.
+        """
         # Initialize internal storage of historical values
         self.X_train_full = X_train
         self.y_train_full = y_train
@@ -25,15 +46,35 @@ class RandomForestPredictor(PredictionModel):
         self._selectBestModel(X_train, y_train)
 
     def predict_task(self, task_features: pd.Series) -> float:
+        """
+        Predicts the output for a single task based on its features using the trained Random Forest model.
+
+        :param task_features: Features of the task to predict.
+
+        :return: Predicted value for the task.
+        """
         task_features_scaled = self.train_X_scaler.transform(task_features.values.reshape(-1, 1))
         return self.train_y_scaler.inverse_transform(self.regressor.predict(task_features_scaled).reshape(-1, 1))
 
     def predict_tasks(self, taskDataframe: pd.DataFrame) -> np.ndarray:
+        """
+        Predicts the output for multiple tasks based on their features using the trained Random Forest model.
+
+        :param taskDataframe: DataFrame containing features of multiple tasks.
+
+        :return: Array of predicted values for the tasks.
+        """
         taskDataframe_scaled = self.train_X_scaler.transform(taskDataframe)
 
         return self.train_y_scaler.inverse_transform(self.regressor.predict(taskDataframe_scaled).reshape(-1, 1))
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
+        """
+        Updates the model with new training data by appending it to the historical data and retraining the model.
+
+        :param X_train: New training features.
+        :param y_train: New training labels.
+        """
         # Append the newly incoming data to maintain all historical data
         self.X_train_full = np.concatenate((self.X_train_full, [X_train]))
         self.y_train_full = np.concatenate((self.y_train_full, np.array([y_train]).reshape(-1, 1)))
@@ -45,6 +86,15 @@ class RandomForestPredictor(PredictionModel):
         self._selectBestModel(self.X_train_full, self.y_train_full)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
+        """
+        Calculates the smoothed Mean Absolute Percentage Error (MAPE) between true and predicted values.
+
+        :param y_true: True values.
+        :param y_pred: Predicted values.
+        :param epsilon: Small value to avoid division by zero.
+
+        :return: Smoothed MAPE value.
+        """
         y_true, y_pred = np.array(y_true), np.array(y_pred)
         # Calculate the individual percentage errors and clip each at 100%
         mape = np.abs((y_true - y_pred) / (y_true + epsilon))
@@ -52,7 +102,12 @@ class RandomForestPredictor(PredictionModel):
         return np.mean(mape)
 
     def _selectBestModel(self, X_train, y_train):
+        """
+        Selects the best Random Forest model based on the specified error metric.
 
+        :param X_train: Training features.
+        :param y_train: Training labels.
+        """
         self.train_X_scaler = MinMaxScaler()
         self.train_y_scaler = MinMaxScaler()
 
