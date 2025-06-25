@@ -4,8 +4,7 @@ import logging
 
 
 def write_result_to_csv(method_name: str, error_strategy: str, offset_strategy: str, taskname: str,
-                        wastage_in_bytes: str,
-                        wastage_mb: str, wastage_gb: str, wastage_mbh: str, wastage_gbh: str, failures: int,
+                        wastage_gb: str, wastage_gbh: str, failures: int,
                         runtimes_task: float,
                         number_test: int, workflow: str, runtime_exp: float, maq: float, alpha: float,
                         use_softmax: bool,
@@ -17,10 +16,7 @@ def write_result_to_csv(method_name: str, error_strategy: str, offset_strategy: 
     :param error_strategy: Strategy used for error handling.
     :param offset_strategy: Strategy used for offset handling.
     :param taskname: Name of the task.
-    :param wastage_in_bytes: Wastage in bytes.
-    :param wastage_mb: Wastage in megabytes.
     :param wastage_gb: Wastage in gigabytes.
-    :param wastage_mbh: Wastage in megabytes per hour.
     :param wastage_gbh: Wastage in gigabytes per hour.
     :param failures: Number of failures encountered.
     :param runtimes_task: Total runtime of the tasks.
@@ -39,15 +35,14 @@ def write_result_to_csv(method_name: str, error_strategy: str, offset_strategy: 
         with open(get_file_path(workflow, alpha, use_softmax, error_metric,seed), 'a', newline='\n') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
             writer.writerow(
-                ["Method", "Error_Strategy", "Offset_Strategy", "Task_Name", "Wastage_Bytes", "Wastage_MB",
-                 "Wastage_GB", "Wastage_MBh", "Wastage_GBh", "Failures", "Runtime_Tasks", "Number_Tests", "Workflow",
-                 "RuntimeExp", "MAQ", "Alpha", "Use_softmax", "Models", "Error_Metric", "Accuracy", "Seed"])
+                ["Method", "Error_Strategy", "Offset_Strategy", "Task_Name", "Wastage_GB", "Wastage_GBh",
+                 "Failures", "Runtime_Tasks", "Number_Tests", "Workflow", "RuntimeExp", "MAQ", "Alpha",
+                 "Use_softmax", "Models", "Error_Metric", "Accuracy", "Seed"])
 
     with open(get_file_path(workflow, alpha, use_softmax, error_metric, seed), 'a', newline='\n') as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
         writer.writerow(
-            [method_name, error_strategy, offset_strategy, taskname, wastage_in_bytes,
-             wastage_mb, wastage_gb, wastage_mbh, wastage_gbh, failures, runtimes_task,
+            [method_name, error_strategy, offset_strategy, taskname, wastage_gb, wastage_gbh, failures, runtimes_task,
              number_test, workflow, runtime_exp, maq, alpha, use_softmax, models, error_metric, accuracy, seed])
 
 

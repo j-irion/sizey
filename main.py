@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 
 from approach.abstract_predictor import PredictionMethod
 from approach.experiment_constants import ERROR_STRATEGY, OFFSET_STRATEGY
-from approach.helper import byte_and_time_to_mbh, ms_to_h, byte_and_time_to_gbh, byte_to_gigabyte, byte_to_mb, \
+from approach.helper import ms_to_h, byte_and_time_to_gbh, byte_to_gigabyte, byte_to_mb, \
     write_result_to_csv, check_substring_in_csv, write_single_task_to_csv
 from approach.sizing_tasks import Sizey
 from baselines.tovar import TovarPredictor
@@ -59,15 +59,9 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
     """
     usage = 0
     failures = 0
-    wastage_in_bytes_over = 0
-    wastage_in_mb_over = 0
     wastage_in_gb_over = 0
-    wastage_mbH_over = 0
     wastage_gbh_over = 0
-    wastage_in_bytes_under = 0
-    wastage_in_mb_under = 0
     wastage_in_gb_under = 0
-    wastage_mbH_under = 0
     wastage_gbh_under = 0
     time_start = time.time()
     sumRuntimeTasks = 0
@@ -115,10 +109,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
         actualList.append(entry)
 
         if memory_prediction_from_method >= entry:
-            wastage_in_bytes_over = wastage_in_bytes_over + (memory_prediction_from_method - entry)
-            wastage_in_mb_over = wastage_in_mb_over + byte_to_mb(memory_prediction_from_method - entry)
             wastage_in_gb_over = wastage_in_gb_over + byte_to_gigabyte(memory_prediction_from_method - entry)
-            wastage_mbH_over = wastage_mbH_over + byte_and_time_to_mbh(memory_prediction_from_method - entry, runtime)
             wastage_gbh_over = wastage_gbh_over + byte_and_time_to_gbh(memory_prediction_from_method - entry, runtime)
             task_iteration_gbh = task_iteration_gbh + byte_and_time_to_gbh(memory_prediction_from_method - entry,
                                                                            runtime)
@@ -126,10 +117,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
             logging.debug("Wasted " + str((memory_prediction_from_method - entry)) + " bytes")
         elif memory_prediction_from_method < entry:
             logging.debug("Handle underprediction")
-            wastage_in_bytes_under = wastage_in_bytes_under + (memory_prediction_from_method)
-            wastage_in_mb_under = wastage_in_mb_under + byte_to_mb(memory_prediction_from_method)
             wastage_in_gb_under = wastage_in_gb_under + byte_to_gigabyte(memory_prediction_from_method)
-            wastage_mbH_under = wastage_mbH_under + byte_and_time_to_mbh(memory_prediction_from_method, runtime)
             wastage_gbh_under = wastage_gbh_under + byte_and_time_to_gbh(memory_prediction_from_method, runtime)
             task_iteration_gbh = task_iteration_gbh + byte_and_time_to_gbh(memory_prediction_from_method,
                                                                            runtime)
@@ -145,11 +133,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
                 predictions.append(memory_prediction_from_method)
                 raw_prediction = raw_memory_prediction_from_method
                 if memory_prediction_from_method < entry:
-                    wastage_in_bytes_under = wastage_in_bytes_under + (memory_prediction_from_method)
-                    wastage_in_mb_under = wastage_in_mb_under + byte_to_mb(memory_prediction_from_method)
                     wastage_in_gb_under = wastage_in_gb_under + byte_to_gigabyte(memory_prediction_from_method)
-                    wastage_mbH_under = wastage_mbH_under + byte_and_time_to_mbh(memory_prediction_from_method,
-                                                                                 runtime)
                     wastage_gbh_under = wastage_gbh_under + byte_and_time_to_gbh(memory_prediction_from_method,
                                                                                  runtime)
                     task_iteration_gbh = task_iteration_gbh + byte_and_time_to_gbh(memory_prediction_from_method,
@@ -157,11 +141,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
                     sumRuntimeTasks = sumRuntimeTasks + ms_to_h(runtime)
                     continue
                 else:
-                    wastage_in_bytes_under = wastage_in_bytes_under + (memory_prediction_from_method - entry)
-                    wastage_in_mb_under = wastage_in_mb_under + byte_to_mb(memory_prediction_from_method - entry)
                     wastage_in_gb_under = wastage_in_gb_under + byte_to_gigabyte(memory_prediction_from_method - entry)
-                    wastage_mbH_under = wastage_mbH_under + byte_and_time_to_mbh(memory_prediction_from_method - entry,
-                                                                                 runtime)
                     wastage_gbh_under = wastage_gbh_under + byte_and_time_to_gbh(memory_prediction_from_method - entry,
                                                                                  runtime)
                     task_iteration_gbh = task_iteration_gbh + byte_and_time_to_gbh(
@@ -184,14 +164,14 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
 
     time_end = time.time()
 
-    maq = usage / (usage + wastage_gbh_over + wastage_in_gb_under)
+    maq = usage / (usage + wastage_gbh_over + wastage_gbh_under)
 
+    logging.debug(f"Error Metric: {error_metric}, Accuracy: {maq * 100}, Seed: {seed}")
     write_result_to_csv(method_name, error_strat, offset_strat, taskname,
-                        wastage_in_bytes_under + wastage_in_bytes_over, wastage_in_mb_under + wastage_in_mb_over,
-                        wastage_in_gb_under + wastage_in_gb_over, wastage_mbH_under + wastage_mbH_over,
-                        wastage_gbh_under + wastage_gbh_over, failures, sumRuntimeTasks, len(y_test_inner), workflow,
-                        time_end - time_start, maq * 100, alpha, use_softmax, prediction_method.get_number_subModels(),
-                        error_metric, str(mean_absolute_percentage_error(actualList, predictionList)), seed)
+                        wastage_in_gb_under + wastage_in_gb_over, wastage_gbh_under + wastage_gbh_over, failures,
+                        sumRuntimeTasks, len(y_test_inner), workflow, time_end - time_start, maq * 100, alpha,
+                        use_softmax, prediction_method.get_number_subModels(), error_metric,
+                        str(mean_absolute_percentage_error(actualList, predictionList)), seed)
     return wastage_in_gb_under + wastage_in_gb_over
 
 
@@ -270,17 +250,9 @@ def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: in
         if not check_substring_in_csv(wf_name, sizey_alpha, use_softmax, error_metric,
                                       "Workflow-Presets", task, "Default", "Default", seed):
             write_result_to_csv("Workflow-Presets", "Default", "Default", task,
-                                (filtered_original_data_for_default_comparison["memory"] -
-                                 filtered_original_data_for_default_comparison["peak_rss"]).sum(),
-                                str(byte_to_mb((filtered_original_data_for_default_comparison["memory"] -
-                                                filtered_original_data_for_default_comparison["peak_rss"]).sum())),
                                 str(byte_to_gigabyte((filtered_original_data_for_default_comparison["memory"] -
                                                       filtered_original_data_for_default_comparison[
                                                         "peak_rss"]).sum())),
-                                str(((filtered_original_data_for_default_comparison["memory"] -
-                                      filtered_original_data_for_default_comparison["peak_rss"]) * 0.000001 *
-                                     filtered_original_data_for_default_comparison[
-                                       "realtime"] / 3600000.0).sum()),
                                 str(((filtered_original_data_for_default_comparison["memory"] -
                                       filtered_original_data_for_default_comparison["peak_rss"]) * 0.000000001 *
                                      filtered_original_data_for_default_comparison[
@@ -321,10 +293,11 @@ if __name__ == "__main__":
                         help="Error metric for model training")
     parser.add_argument("seed", type=int, help="Random seed for train/test split")
     args = parser.parse_args()
+    print(args)
 
     if not os.path.isfile(args.filename):
       parser.error(f"File '{args.filename}' does not exist")
     if not 0.0 <= args.alpha <= 1.0:
       parser.error("alpha must be between 0.0 and 1.0")
 
-    main(args.filename, args.alpha, args.softmax, args.error_metric, args.seed)
+    main(filename=args.filename, alpha=args.alpha, softmax=args.softmax, error_metric=args.error_metric, seed=args.seed)

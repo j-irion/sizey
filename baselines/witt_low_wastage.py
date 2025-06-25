@@ -444,9 +444,7 @@ def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float,
                                                          row["Wastage_GBh"], row["Predictions"], row["peak_rss"],
                                                          row["first_allocation"], len(row["Predictions"])-1, alpha, row["realtime"], len(row["Predictions"])-1, seed)
 
-                            write_result_to_csv("Witt-Ice", "Default", "Default", task,
-                                                w.wastage_GB * 1000000000, w.wastage_GB * 1000000, w.wastage_GB, w.wastage_GBh * 1000000,
-                                                w.wastage_GBh,
+                            write_result_to_csv("Witt-Ice", "Default", "Default", task, w.wastage_GB, w.wastage_GBh,
                                                 w.failures, w.runtime_h, "1", workflow, time_needed, "1.0", alpha, use_softmax_single, {}, error_metric, "-1", seed)
 
         #training.plot.scatter(x='input_size', y='rss')
