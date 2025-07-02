@@ -30,6 +30,7 @@ class NeuralNetworkPredictor(PredictionModel):
         train_y_scaler (MinMaxScaler): Scaler for normalizing training labels.
         regressor (MLPRegressor): Trained Neural Network model.
         model_error (float): Error score of the best model.
+        best_params (dict): Hyperparameters of the selected model.
         err_metr (str): Error metric used for model selection.
     """
 
@@ -73,20 +74,32 @@ class NeuralNetworkPredictor(PredictionModel):
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
         """
-        Updates the model with new training data by appending it to the historical data and retraining the model.
+        Incrementally updates the model using ``partial_fit``.
+
+        The historical data is kept for evaluation only. During updates, the
+        scalers are updated incrementally and the existing ``MLPRegressor`` is
+        further trained with the new data instead of running ``GridSearchCV``
+        again.
 
         :param X_train: New training features.
         :param y_train: New training labels.
         """
-        # Append the newly incoming data to maintain all historical data
-        self.X_train_full = np.concatenate((self.X_train_full, self._ensure_column_vector(X_train)))
-        self.y_train_full = np.concatenate((self.y_train_full, self._ensure_column_vector([y_train])))
+        X_col = self._ensure_column_vector(X_train)
+        y_col = self._ensure_column_vector([y_train])
 
-        # Scaling of data with all historical data
-        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
-        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
+        # Keep history for evaluation only
+        self.X_train_full = np.concatenate((self.X_train_full, X_col))
+        self.y_train_full = np.concatenate((self.y_train_full, y_col))
 
-        self._selectBestModel(self.X_train_full, self.y_train_full)
+        # Update scalers with new data
+        self.train_X_scaler.partial_fit(X_col)
+        self.train_y_scaler.partial_fit(y_col)
+
+        X_scaled = self.train_X_scaler.transform(X_col)
+        y_scaled = self.train_y_scaler.transform(y_col).ravel()
+
+        # Incrementally update the regressor
+        self.regressor.partial_fit(X_scaled, y_scaled)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
         """
@@ -106,7 +119,12 @@ class NeuralNetworkPredictor(PredictionModel):
 
     def _selectBestModel(self, X_train, y_train):
         """
-        Selects the best Neural Network model based on hyperparameter tuning using GridSearchCV.
+        Fit an ``MLPRegressor`` using grid search to select the best hyperparameters.
+
+        This method is executed only once during the initial training. The best
+        parameters are stored so that subsequent calls to ``update_model`` can
+        continue training the same model with ``partial_fit`` without running
+        grid search again.
 
         :param X_train: Training features.
         :param y_train: Training labels.
@@ -142,10 +160,7 @@ class NeuralNetworkPredictor(PredictionModel):
         best_model = grid_search.best_estimator_
 
         self.model_error = best_score
-        
-        
-        
-
+        self.best_params = grid_search.best_params_
         self.regressor = best_model
 
 
