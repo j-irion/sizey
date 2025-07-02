@@ -39,7 +39,11 @@ class ClusteringPredictor(PredictionModel):
         self.X_train_full = self._ensure_column_vector(X_train)
         self.y_train_full = self._ensure_column_vector(y_train)
 
-        self.regressor = MiniBatchKMeans().fit(X_train_scaled, y_train_scaled)
+        # Store the MiniBatchKMeans instance so that it can be incrementally
+        # updated with ``partial_fit`` later on.
+        self.regressor = MiniBatchKMeans()
+        self.regressor.fit(X_train_scaled)
+        self.initial_regressor = self.regressor
 
     def predict_task(self, task_features: pd.Series) -> float:
         """
@@ -72,14 +76,16 @@ class ClusteringPredictor(PredictionModel):
         :param X_train: New training features.
         :param y_train: New training labels.
         """
-        # Append the newly incoming data to maintain all historical data
-        self.X_train_full = np.concatenate((self.X_train_full, self._ensure_column_vector(X_train)))
-        self.y_train_full = np.concatenate((self.y_train_full, self._ensure_column_vector([y_train])))
+        X_col = self._ensure_column_vector(X_train)
+        y_col = self._ensure_column_vector([y_train])
 
-        # Scaling of data with all historical data
-        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
-        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
+        # Keep history only for evaluation purposes
+        self.X_train_full = np.concatenate((self.X_train_full, X_col))
+        self.y_train_full = np.concatenate((self.y_train_full, y_col))
 
-        # Retrain existing model with scaled data
-        self.regressor.fit(self.train_X_scaler.transform(self.X_train_full),
-                           self.train_y_scaler.transform(self.y_train_full))
+        # Incrementally update scalers and clustering model
+        self.train_X_scaler.partial_fit(X_col)
+        self.train_y_scaler.partial_fit(y_col)
+
+        X_scaled = self.train_X_scaler.transform(X_col)
+        self.regressor.partial_fit(X_scaled)
