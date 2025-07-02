@@ -225,7 +225,7 @@ class Sizey(PredictionMethod):
         self.linearPredictor.update_model(X_train, y_train)
         self.neuralNetworkPredictor.update_model(X_train, y_train)
         self.randomForestPredictor.update_model(X_train, y_train)
-        self.neuralNetworkPredictor.update_model(X_train, y_train)
+        self.knnPredictor.update_model(X_train, y_train)
 
     def handle_underprediction(self, input_size: float, predicted: float, user_estimate: float, retry_number: int,
                                actual_memory: float) -> float:
