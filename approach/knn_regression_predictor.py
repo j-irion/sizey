@@ -30,6 +30,7 @@ class KNNPredictor(PredictionModel):
         train_y_scaler (MinMaxScaler): Scaler for normalizing training labels.
         regressor (KNeighborsRegressor): Trained KNN model.
         model_error (float): Error score of the best model.
+        best_params (dict): Hyperparameters of the selected model.
         err_metr (str): Error metric used for model selection.
     """
 
@@ -73,20 +74,33 @@ class KNNPredictor(PredictionModel):
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
         """
-        Updates the KNN model with new training data by appending it to the historical data and retraining the model.
+        Incrementally updates the model with a new training sample.
+
+        The new data is appended to ``X_train_full`` and ``y_train_full``. The
+        existing scalers are updated via ``partial_fit`` and the regressor,
+        configured with ``best_params``, is fitted on the scaled full dataset
+        without running grid search again.
 
         :param X_train: New training features.
         :param y_train: New training labels.
         """
-        # Append the newly incoming data to maintain all historical data
-        self.X_train_full = np.concatenate((self.X_train_full, self._ensure_column_vector(X_train)))
-        self.y_train_full = np.concatenate((self.y_train_full, self._ensure_column_vector([y_train])))
+        X_col = self._ensure_column_vector(X_train)
+        y_col = self._ensure_column_vector([y_train])
 
-        # Scaling of data with all historical data
-        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
-        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
+        # Keep full history for evaluation only
+        self.X_train_full = np.concatenate((self.X_train_full, X_col))
+        self.y_train_full = np.concatenate((self.y_train_full, y_col))
 
-        self._selectBestModel(self.X_train_full, self.y_train_full)
+        # Incrementally update scalers with the new sample
+        self.train_X_scaler.partial_fit(X_col)
+        self.train_y_scaler.partial_fit(y_col)
+
+        X_scaled = self.train_X_scaler.transform(self.X_train_full)
+        y_scaled = self.train_y_scaler.transform(self.y_train_full).ravel()
+
+        # Refit the regressor on the entire dataset using stored best parameters
+        self.regressor = KNeighborsRegressor(**self.best_params)
+        self.regressor.fit(X_scaled, y_scaled)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
         """
@@ -106,7 +120,11 @@ class KNNPredictor(PredictionModel):
 
     def _selectBestModel(self, X_train, y_train):
         """
-        Selects the best KNN model using GridSearchCV based on the specified error metric.
+        Fit a ``KNeighborsRegressor`` using grid search to select the best
+        hyperparameters.
+
+        The best parameters are stored so that subsequent updates can reuse the
+        same configuration without running grid search again.
 
         :param X_train: Training features.
         :param y_train: Training labels.
@@ -143,4 +161,5 @@ class KNNPredictor(PredictionModel):
         best_model = grid_search.best_estimator_
 
         self.model_error = best_score
+        self.best_params = grid_search.best_params_
         self.regressor = best_model
