@@ -96,10 +96,10 @@ class LinearPredictor(PredictionModel):
         self.train_X_scaler.partial_fit(X_batch)
         self.train_y_scaler.partial_fit(y_batch)
 
-        X_scaled = self.train_X_scaler.transform(X_col)
-        y_scaled = self.train_y_scaler.transform(y_col).ravel()
+        X_scaled = self.train_X_scaler.transform(X_batch)
+        y_scaled = self.train_y_scaler.transform(y_batch).ravel()
 
-        # Incrementally update the regressor
+        # Incrementally update the regressor on the whole mini-batch
         self.regressor.partial_fit(X_scaled, y_scaled)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
