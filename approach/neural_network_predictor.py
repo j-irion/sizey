@@ -34,6 +34,13 @@ class NeuralNetworkPredictor(PredictionModel):
         err_metr (str): Error metric used for model selection.
     """
 
+    def __init__(self, workflow_name: str, task_name: str, err_metr: str, batch_size: int = 1):
+        """Initialize the predictor and configure the mini-batch size used for updates."""
+        super().__init__(workflow_name, task_name, err_metr)
+        self.batch_size = batch_size
+        self._batch_X = []
+        self._batch_y = []
+
     def initial_model_training(self, X_train, y_train) -> None:
         """
         Initializes the Neural Network model with training data.
@@ -73,30 +80,32 @@ class NeuralNetworkPredictor(PredictionModel):
         return self.train_y_scaler.inverse_transform(self._ensure_column_vector(preds))
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
-        """
-        Incrementally updates the model using ``partial_fit``.
-
-        The historical data is kept for evaluation only. During updates, the
-        scalers are updated incrementally and the existing ``MLPRegressor`` is
-        further trained with the new data instead of running ``GridSearchCV``
-        again.
-
-        :param X_train: New training features.
-        :param y_train: New training labels.
-        """
+        """Accumulate new samples and update the model in mini-batches."""
         X_col = self._ensure_column_vector(X_train)
         y_col = self._ensure_column_vector([y_train])
 
+        self._batch_X.append(X_col)
+        self._batch_y.append(y_col)
+
+        if len(self._batch_X) < self.batch_size:
+            return
+
+        X_batch = np.vstack(self._batch_X)
+        y_batch = np.vstack(self._batch_y)
+        self._batch_X.clear()
+        self._batch_y.clear()
+
         # Keep history for evaluation only
-        self.X_train_full = np.concatenate((self.X_train_full, X_col))
-        self.y_train_full = np.concatenate((self.y_train_full, y_col))
+        self.X_train_full = np.concatenate((self.X_train_full, X_batch))
+        self.y_train_full = np.concatenate((self.y_train_full, y_batch))
 
         # Update scalers with new data
-        self.train_X_scaler.partial_fit(X_col)
-        self.train_y_scaler.partial_fit(y_col)
+        # Update scalers with the mini-batch
+        self.train_X_scaler.partial_fit(X_batch)
+        self.train_y_scaler.partial_fit(y_batch)
 
-        X_scaled = self.train_X_scaler.transform(X_col)
-        y_scaled = self.train_y_scaler.transform(y_col).ravel()
+        X_scaled = self.train_X_scaler.transform(X_batch)
+        y_scaled = self.train_y_scaler.transform(y_batch).ravel()
 
         # Incrementally update the regressor
         self.regressor.partial_fit(X_scaled, y_scaled)

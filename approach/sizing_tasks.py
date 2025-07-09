@@ -68,7 +68,7 @@ class Sizey(PredictionMethod):
 
     # Initialize Predictors
     def __init__(self, X_train, y_train, alpha: float, offset_strategy: OFFSET_STRATEGY, default_offset: float,
-                 error_strategy: ERROR_STRATEGY, use_softmax: bool, error_metric: str):
+                 error_strategy: ERROR_STRATEGY, use_softmax: bool, error_metric: str, batch_size: int = 1):
         """
         Initializes the Sizey class with training data and parameters.
 
@@ -81,9 +81,9 @@ class Sizey(PredictionMethod):
         :param use_softmax: Whether to use softmax for prediction.
         :param error_metric: Metric to evaluate prediction errors.
         """
-        self.linearPredictor = LinearPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric)
+        self.linearPredictor = LinearPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric, batch_size=batch_size)
         self.neuralNetworkPredictor = NeuralNetworkPredictor(workflow_name="Test", task_name="Test",
-                                                             err_metr=error_metric)
+                                                             err_metr=error_metric, batch_size=batch_size)
         self.randomForestPredictor = RandomForestPredictor(workflow_name="Test", task_name="Test",
                                                            err_metr=error_metric)
         self.knnPredictor = KNNPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric)

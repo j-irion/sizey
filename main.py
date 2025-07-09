@@ -178,7 +178,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
     return wastage_in_gb_under + wastage_in_gb_over
 
 
-def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: int) -> None:
+def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: int, batch_size: int = 1) -> None:
     df2 = getTasksFromCSV(filename)
     unique_tasks = df2['process'].unique()
 
@@ -278,7 +278,7 @@ def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: in
             for offset_strat in OFFSET_STRATEGY:
                 if (offset_strat.name == "DYNAMIC") & (error_strat.name == "MAX_EVER_OBSERVED"):
                     sizey = Sizey(X_train, y_train, sizey_alpha, offset_strat, 0.05,
-                                  error_strat, use_softmax, error_metric)
+                                  error_strat, use_softmax, error_metric, batch_size)
                     run_online_and_calculate_wastage("Sizey", task, error_strat.name, offset_strat.name, sizey, X_test,
                                                      y_test, runtime_test, user_estimates_test,
                                                      wf_name,
@@ -295,6 +295,7 @@ if __name__ == "__main__":
     parser.add_argument("error_metric", choices=["smoothed_mape", "neg_mean_squared_error"],
                         help="Error metric for model training")
     parser.add_argument("seed", type=int, help="Random seed for train/test split")
+    parser.add_argument("batch_size", type=int, default=1, help="Batch size for model training")
     args = parser.parse_args()
 
     if not os.path.isfile(args.filename):
@@ -302,4 +303,4 @@ if __name__ == "__main__":
     if not 0.0 <= args.alpha <= 1.0:
       parser.error("alpha must be between 0.0 and 1.0")
 
-    main(filename=args.filename, alpha=args.alpha, softmax=args.softmax, error_metric=args.error_metric, seed=args.seed)
+    main(filename=args.filename, alpha=args.alpha, softmax=args.softmax, error_metric=args.error_metric, seed=args.seed, batch_size=args.batch_size)
