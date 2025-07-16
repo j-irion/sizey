@@ -1,6 +1,22 @@
 import csv
 import os
 import logging
+from typing import Iterable, List
+
+
+def log_if_verbose(msg: str) -> None:
+    """Log a debug message if logging is configured for it."""
+    logging.debug(msg)
+
+
+def nth_deltas(values: Iterable[float], step: int, limit: int) -> List[float]:
+    """Return ``step``-lagged deltas over the last ``limit`` elements."""
+    vals = list(values)
+    deltas: List[float] = []
+    start = max(0, len(vals) - limit - step)
+    for i in range(start, len(vals) - step):
+        deltas.append(vals[i + step] - vals[i])
+    return deltas
 
 
 def write_result_to_csv(method_name: str, error_strategy: str, offset_strategy: str, taskname: str,

@@ -91,7 +91,7 @@ class Sizey(PredictionMethod):
                                                batch_size=batch_size, retrain_interval=retrain_interval)
         self.neuralNetworkPredictor = NeuralNetworkPredictor(workflow_name="Test", task_name="Test",
                                                              err_metr=error_metric, batch_size=batch_size,
-                                                             retrain_interval=retrain_interval)
+                                                             retrain_interval=retrain_interval, use_online_grid=True)
         self.randomForestPredictor = RandomForestPredictor(workflow_name="Test", task_name="Test",
                                                            err_metr=error_metric,
                                                            retrain_interval=retrain_interval)
