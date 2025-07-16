@@ -21,6 +21,12 @@ class ClusteringPredictor(PredictionModel):
         regressor (MiniBatchKMeans): Trained clustering model.
     """
 
+    def __init__(self, workflow_name: str, task_name: str, err_metr: str,
+                 retrain_interval: int | None = None):
+        super().__init__(workflow_name, task_name, err_metr)
+        self.retrain_interval = retrain_interval or 0
+        self._update_counter = 0
+
     def initial_model_training(self, X_train, y_train) -> None:
         """
         Initializes the model with training data using MiniBatchKMeans clustering.
@@ -89,3 +95,10 @@ class ClusteringPredictor(PredictionModel):
 
         X_scaled = self.train_X_scaler.transform(X_col)
         self.regressor.partial_fit(X_scaled)
+
+        self._update_counter += 1
+        if self.retrain_interval and self._update_counter % self.retrain_interval == 0:
+            # Refit clustering model on all accumulated data
+            X_full_scaled = self.train_X_scaler.transform(self.X_train_full)
+            self.regressor = MiniBatchKMeans()
+            self.regressor.fit(X_full_scaled)

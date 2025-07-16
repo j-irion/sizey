@@ -68,7 +68,8 @@ class Sizey(PredictionMethod):
 
     # Initialize Predictors
     def __init__(self, X_train, y_train, alpha: float, offset_strategy: OFFSET_STRATEGY, default_offset: float,
-                 error_strategy: ERROR_STRATEGY, use_softmax: bool, error_metric: str, batch_size: int = 1):
+                 error_strategy: ERROR_STRATEGY, use_softmax: bool, error_metric: str,
+                 batch_size: int = 1, retrain_interval: int | None = None):
         """
         Initializes the Sizey class with training data and parameters.
 
@@ -80,13 +81,23 @@ class Sizey(PredictionMethod):
         :param error_strategy: Strategy for handling underprediction errors.
         :param use_softmax: Whether to use softmax for prediction.
         :param error_metric: Metric to evaluate prediction errors.
+        :param batch_size: Number of samples collected before performing an
+            incremental model update.
+        :param retrain_interval: After how many mini-batch updates a full
+            re-training of the linear and neural network models should be
+            triggered. ``None`` or ``0`` disables the periodic refresh.
         """
-        self.linearPredictor = LinearPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric, batch_size=batch_size)
+        self.linearPredictor = LinearPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric,
+                                               batch_size=batch_size, retrain_interval=retrain_interval)
         self.neuralNetworkPredictor = NeuralNetworkPredictor(workflow_name="Test", task_name="Test",
-                                                             err_metr=error_metric, batch_size=batch_size)
+                                                             err_metr=error_metric, batch_size=batch_size,
+                                                             retrain_interval=retrain_interval)
         self.randomForestPredictor = RandomForestPredictor(workflow_name="Test", task_name="Test",
-                                                           err_metr=error_metric)
-        self.knnPredictor = KNNPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric)
+                                                           err_metr=error_metric,
+                                                           retrain_interval=retrain_interval)
+        self.knnPredictor = KNNPredictor(workflow_name="Test", task_name="Test",
+                                         err_metr=error_metric,
+                                         retrain_interval=retrain_interval)
         y_train = np.asarray(y_train).ravel()
         self._initial_model_training(X_train, y_train)
         self.alpha = alpha

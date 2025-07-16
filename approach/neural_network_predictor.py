@@ -34,10 +34,19 @@ class NeuralNetworkPredictor(PredictionModel):
         err_metr (str): Error metric used for model selection.
     """
 
-    def __init__(self, workflow_name: str, task_name: str, err_metr: str, batch_size: int = 1):
-        """Initialize the predictor and configure the mini-batch size used for updates."""
+    def __init__(self, workflow_name: str, task_name: str, err_metr: str,
+                 batch_size: int = 1, retrain_interval: int | None = None):
+        """Initialize the predictor.
+
+        ``batch_size`` defines how many samples are accumulated before an
+        incremental update is performed. ``retrain_interval`` controls after how
+        many of these updates a full re-training of the model should be
+        executed. Set it to ``None`` or ``0`` to disable periodic re-training.
+        """
         super().__init__(workflow_name, task_name, err_metr)
         self.batch_size = batch_size
+        self.retrain_interval = retrain_interval or 0
+        self._update_counter = 0
         self._batch_X = []
         self._batch_y = []
 
@@ -109,6 +118,11 @@ class NeuralNetworkPredictor(PredictionModel):
 
         # Incrementally update the regressor
         self.regressor.partial_fit(X_scaled, y_scaled)
+
+        self._update_counter += 1
+        if self.retrain_interval and self._update_counter % self.retrain_interval == 0:
+            # Refit model on the accumulated dataset to refresh weights
+            self._selectBestModel(self.X_train_full, self.y_train_full)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
         """

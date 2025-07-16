@@ -8,7 +8,7 @@ def write_result_to_csv(method_name: str, error_strategy: str, offset_strategy: 
                         runtimes_task: float,
                         number_test: int, workflow: str, runtime_exp: float, maq: float, alpha: float,
                         use_softmax: bool,
-                        models: dict[str, int], error_metric: str, accuracy: str, seed: int):
+                        models: dict[str, int], error_metric: str, accuracy: str, seed: int, batch_size: int, retrain_interval: int):
     """
     Writes the results of a workflow execution to a CSV file.
 
@@ -31,15 +31,15 @@ def write_result_to_csv(method_name: str, error_strategy: str, offset_strategy: 
     :param accuracy: Accuracy of the method.
     :param seed: Random seed used for reproducibility.
     """
-    if not (os.path.exists(get_file_path(workflow, alpha, use_softmax, error_metric, seed))):
-        with open(get_file_path(workflow, alpha, use_softmax, error_metric,seed), 'a', newline='\n') as csvfile:
+    if not (os.path.exists(get_file_path(workflow, alpha, use_softmax, error_metric, seed, batch_size, retrain_interval))):
+        with open(get_file_path(workflow, alpha, use_softmax, error_metric,seed, batch_size, retrain_interval), 'a', newline='\n') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
             writer.writerow(
                 ["Method", "Error_Strategy", "Offset_Strategy", "Task_Name", "Wastage_GB", "Wastage_GBh",
                  "Failures", "Runtime_Tasks", "Number_Tests", "Workflow", "RuntimeExp", "MAQ", "Alpha",
                  "Use_softmax", "Models", "Error_Metric", "Accuracy", "Seed"])
 
-    with open(get_file_path(workflow, alpha, use_softmax, error_metric, seed), 'a', newline='\n') as csvfile:
+    with open(get_file_path(workflow, alpha, use_softmax, error_metric, seed, batch_size, retrain_interval), 'a', newline='\n') as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
         writer.writerow(
             [method_name, error_strategy, offset_strategy, taskname, wastage_gb, wastage_gbh, failures, runtimes_task,
@@ -47,7 +47,7 @@ def write_result_to_csv(method_name: str, error_strategy: str, offset_strategy: 
 
 
 def check_substring_in_csv(workflow, alpha, use_softmax, error_metric, method_name, taskname, offset_strategy,
-                           error_strategy, seed):
+                           error_strategy, seed, batch_size, retrain_interval):
     """
     Checks if a specific substring exists in the CSV file corresponding to the given parameters.
 
@@ -63,10 +63,10 @@ def check_substring_in_csv(workflow, alpha, use_softmax, error_metric, method_na
 
     :return: True if the substring exists in the CSV file, False otherwise.
     """
-    if not os.path.exists(get_file_path(workflow, alpha, use_softmax, error_metric, seed)):
+    if not os.path.exists(get_file_path(workflow, alpha, use_softmax, error_metric, seed, batch_size, retrain_interval)):
         return False
 
-    with open(get_file_path(workflow, alpha, use_softmax, error_metric, seed), newline='') as csvfile:
+    with open(get_file_path(workflow, alpha, use_softmax, error_metric, seed, batch_size, retrain_interval), newline='') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
             # Ensure the row has enough columns
@@ -116,7 +116,7 @@ def write_single_task_to_csv(method_name: str, error_strategy: str, offset_strat
              wastage_gbh, task_runtime, prediction_list, actual_memory, raw_predictions, failures, experimental_time, seed])
 
 
-def get_file_path(workflow: str, alpha: float, use_softmax: bool, error_metric: str, seed: int):
+def get_file_path(workflow: str, alpha: float, use_softmax: bool, error_metric: str, seed: int, batch_size: int, retrain_interval: int):
     """
     Constructs the file path for storing results based on the workflow, alpha value, softmax usage,
     error metric, and seed.
@@ -130,7 +130,7 @@ def get_file_path(workflow: str, alpha: float, use_softmax: bool, error_metric: 
     :return: A string representing the file path for storing results.
     """
     return './results/results_sizey_' + workflow + '_' + str(alpha) + '_' + str(
-        use_softmax) + '_' + error_metric + '_' + str(seed) + '.csv'
+        use_softmax) + '_' + error_metric + '_' + str(seed) + '_' + str(batch_size) + '_' + str(retrain_interval) + '.csv'
 
 
 def get_file_path_tasks(workflow: str, alpha: float, use_softmax: bool, error_metric: str, seed: int):

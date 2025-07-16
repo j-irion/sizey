@@ -34,6 +34,12 @@ class KNNPredictor(PredictionModel):
         err_metr (str): Error metric used for model selection.
     """
 
+    def __init__(self, workflow_name: str, task_name: str, err_metr: str,
+                 retrain_interval: int | None = None):
+        super().__init__(workflow_name, task_name, err_metr)
+        self.retrain_interval = retrain_interval or 0
+        self._update_counter = 0
+
     def initial_model_training(self, X_train, y_train) -> None:
         """
         Initializes the KNN model with training data.
@@ -101,6 +107,11 @@ class KNNPredictor(PredictionModel):
         # Refit the regressor on the entire dataset using stored best parameters
         self.regressor = KNeighborsRegressor(**self.best_params)
         self.regressor.fit(X_scaled, y_scaled)
+
+        self._update_counter += 1
+        if self.retrain_interval and self._update_counter % self.retrain_interval == 0:
+            # Refresh hyperparameters through grid search
+            self._selectBestModel(self.X_train_full, self.y_train_full)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
         """
