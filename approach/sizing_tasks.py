@@ -69,7 +69,7 @@ class Sizey(PredictionMethod):
     # Initialize Predictors
     def __init__(self, X_train, y_train, alpha: float, offset_strategy: OFFSET_STRATEGY, default_offset: float,
                  error_strategy: ERROR_STRATEGY, use_softmax: bool, error_metric: str,
-                 batch_size: int = 1, retrain_interval: int | None = None):
+                 batch_size: int = 1, retrain_interval: int | None = None, use_online_grid: bool = False):
         """
         Initializes the Sizey class with training data and parameters.
 
@@ -88,16 +88,16 @@ class Sizey(PredictionMethod):
             triggered. ``None`` or ``0`` disables the periodic refresh.
         """
         self.linearPredictor = LinearPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric,
-                                               batch_size=batch_size, retrain_interval=retrain_interval)
+                                               batch_size=batch_size, retrain_interval=retrain_interval, use_online_grid=use_online_grid)
         self.neuralNetworkPredictor = NeuralNetworkPredictor(workflow_name="Test", task_name="Test",
                                                              err_metr=error_metric, batch_size=batch_size,
-                                                             retrain_interval=retrain_interval, use_online_grid=True)
+                                                             retrain_interval=retrain_interval, use_online_grid=use_online_grid)
         self.randomForestPredictor = RandomForestPredictor(workflow_name="Test", task_name="Test",
                                                            err_metr=error_metric,
-                                                           retrain_interval=retrain_interval)
+                                                           retrain_interval=retrain_interval, use_online_grid=use_online_grid)
         self.knnPredictor = KNNPredictor(workflow_name="Test", task_name="Test",
                                          err_metr=error_metric,
-                                         retrain_interval=retrain_interval)
+                                         retrain_interval=retrain_interval, use_online_grid=use_online_grid)
         y_train = np.asarray(y_train).ravel()
         self._initial_model_training(X_train, y_train)
         self.alpha = alpha

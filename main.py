@@ -57,7 +57,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
                                      prediction_method: PredictionMethod, X_test_inner,
                                      y_test_inner, additionalTime, user_estimate_mem, workflow: str,
                                      alpha: float, use_softmax: bool,
-                                     error_metric: str, seed: int, batch_size: int, retrain_interval):
+                                     error_metric: str, seed: int, batch_size: int, retrain_interval: int, use_online_grid: bool):
     """
     Run the online prediction method and calculate wastage metrics.
     """
@@ -74,7 +74,7 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
 
     # Check if entry already exists. Helpful in case an execution failed
     if check_substring_in_csv(workflow, alpha, use_softmax, error_metric, method_name, taskname, offset_strat,
-                              error_strat, seed, batch_size, retrain_interval):
+                              error_strat, seed, batch_size, retrain_interval, use_online_grid):
         return
 
     # Online Learning
@@ -174,12 +174,12 @@ def run_online_and_calculate_wastage(method_name: str, taskname: str, error_stra
                         wastage_in_gb_under + wastage_in_gb_over, wastage_gbh_under + wastage_gbh_over, failures,
                         sumRuntimeTasks, len(y_test_inner), workflow, time_end - time_start, maq * 100, alpha,
                         use_softmax, prediction_method.get_number_subModels(), error_metric,
-                        str(mean_absolute_percentage_error(actualList, predictionList)), seed, batch_size, retrain_interval)
+                        str(mean_absolute_percentage_error(actualList, predictionList)), seed, batch_size, retrain_interval, use_online_grid)
     return wastage_in_gb_under + wastage_in_gb_over
 
 
 def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: int,
-         batch_size: int = 1, retrain_interval: int | None = None) -> None:
+         batch_size: int = 1, retrain_interval: int | None = None, use_online_grid: bool = False) -> None:
     """Run the complete Sizey evaluation pipeline.
 
     :param filename: Path to the workflow CSV.
@@ -191,6 +191,8 @@ def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: in
     :param retrain_interval: After how many mini-batch updates a full model
         re-training should be executed. ``None`` or ``0`` disables the
         periodic refresh.
+    :param use_online_grid: Whether to use the online grid search for
+        hyperparameter tuning.
     """
     df2 = getTasksFromCSV(filename)
     unique_tasks = df2['process'].unique()
@@ -243,28 +245,28 @@ def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: in
                                          X_test, y_test,
                                          runtime_test, user_estimates_test, wf_name,
                                          sizey_alpha,
-                                         use_softmax, error_metric, seed, batch_size, retrain_interval)
+                                         use_softmax, error_metric, seed, batch_size, retrain_interval, use_online_grid)
 
         run_online_and_calculate_wastage("Tovar", task, 'Default', 'Default', tovar_predictor,
                                          X_test, y_test, runtime_test, user_estimates_test,
                                          wf_name, sizey_alpha, use_softmax,
-                                         error_metric, seed, batch_size, retrain_interval)
+                                         error_metric, seed, batch_size, retrain_interval, use_online_grid)
 
         run_online_and_calculate_wastage("Witt-Percentile", task, 'Default', 'Default', witt_percentile_predictor,
                                          X_test, y_test, runtime_test, user_estimates_test,
                                          wf_name,
-                                         sizey_alpha, use_softmax, error_metric, seed, batch_size, retrain_interval)
+                                         sizey_alpha, use_softmax, error_metric, seed, batch_size, retrain_interval, use_online_grid)
 
         run_online_and_calculate_wastage("Witt-LR", task, 'Default', OFFSET_STRATEGY.STDUNDER.name,
                                          witt_lr_predictor_stdunder, X_test, y_test,
                                          runtime_test, user_estimates_test, wf_name,
                                          sizey_alpha,
-                                         use_softmax, error_metric, seed, batch_size, retrain_interval)
+                                         use_softmax, error_metric, seed, batch_size, retrain_interval, use_online_grid)
 
         filtered_original_data_for_default_comparison = new_dataF[new_dataF.index.isin(y_test.index)]
 
         if not check_substring_in_csv(wf_name, sizey_alpha, use_softmax, error_metric,
-                                      "Workflow-Presets", task, "Default", "Default", seed, batch_size, retrain_interval):
+                                      "Workflow-Presets", task, "Default", "Default", seed, batch_size, retrain_interval, use_online_grid):
             write_result_to_csv("Workflow-Presets", "Default", "Default", task,
                                 str(byte_to_gigabyte((filtered_original_data_for_default_comparison["memory"] -
                                                       filtered_original_data_for_default_comparison[
@@ -284,7 +286,7 @@ def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: in
                                  ((filtered_original_data_for_default_comparison["memory"] -
                                    filtered_original_data_for_default_comparison["peak_rss"]) * 0.000000001 *
                                   filtered_original_data_for_default_comparison["realtime"] / 3600000.0).sum()
-                                 ) * 100, sizey_alpha, use_softmax, {}, error_metric, "-1", seed, batch_size, retrain_interval)
+                                 ) * 100, sizey_alpha, use_softmax, {}, error_metric, "-1", seed, batch_size, retrain_interval, use_online_grid)
 
         # You can configure multiple/all Sizey configurations. Currently, it uses the paper default
         for error_strat in ERROR_STRATEGY:
@@ -292,13 +294,13 @@ def main(filename: str, alpha: float, softmax: bool, error_metric: str, seed: in
                 if (offset_strat.name == "DYNAMIC") & (error_strat.name == "MAX_EVER_OBSERVED"):
                     sizey = Sizey(X_train, y_train, sizey_alpha, offset_strat, 0.05,
                                   error_strat, use_softmax, error_metric, batch_size,
-                                  retrain_interval)
+                                  retrain_interval, use_online_grid)
                     run_online_and_calculate_wastage("Sizey", task, error_strat.name, offset_strat.name, sizey, X_test,
                                                      y_test, runtime_test, user_estimates_test,
                                                      wf_name,
-                                                     sizey_alpha, use_softmax, error_metric, seed, batch_size, retrain_interval)
+                                                     sizey_alpha, use_softmax, error_metric, seed, batch_size, retrain_interval, use_online_grid)
 
-    main_witt_wastage(wf_name, seed, error_metric, sizey_alpha, use_softmax, batch_size, retrain_interval)
+    main_witt_wastage(wf_name, seed, error_metric, sizey_alpha, use_softmax, batch_size, retrain_interval, use_online_grid)
 
 
 if __name__ == "__main__":
@@ -313,6 +315,8 @@ if __name__ == "__main__":
                         help="Batch size for model training")
     parser.add_argument("retrain_interval", type=int, nargs="?", default=0,
                         help="Mini-batch updates after which to re-train the model")
+    parser.add_argument("--use_online_grid", action="store_true",
+                        help="Use online grid search for hyperparameter tuning")
     args = parser.parse_args()
 
     if not os.path.isfile(args.filename):
@@ -322,5 +326,5 @@ if __name__ == "__main__":
 
     main(filename=args.filename, alpha=args.alpha, softmax=args.softmax,
          error_metric=args.error_metric, seed=args.seed, batch_size=args.batch_size,
-         retrain_interval=args.retrain_interval)
+         retrain_interval=args.retrain_interval, use_online_grid=args.use_online_grid)
 

@@ -5,6 +5,9 @@ import logging
 from sklearn.linear_model import SGDRegressor
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import GridSearchCV
+import itertools
+
+from approach import helper
 from sklearn.preprocessing import MinMaxScaler
 
 from approach.abstract_predictor import PredictionModel
@@ -28,8 +31,20 @@ class LinearPredictor(PredictionModel):
         err_metr (str): Error metric used for model selection.
     """
 
+    params = {
+        'alpha': [0.0001, 0.001],
+        'penalty': ['l2', 'l1', 'elasticnet'],
+        'learning_rate': ['optimal', 'invscaling']
+    }
+
     def __init__(self, workflow_name: str, task_name: str, err_metr: str,
-                 batch_size: int = 1, retrain_interval: int | None = None):
+                 batch_size: int = 1, retrain_interval: int | None = None,
+                 use_online_grid: bool = False,
+                 num_full_online_partials: int = 10,
+                 save_top_n: int = 10,
+                 param_cull_cutoff: int = -5,
+                 param_cull_plus_percent: float = 0.3,
+                 param_cull_minus_percent: float = 0.3):
         """Initialize the predictor.
 
         ``batch_size`` controls after how many samples the accumulated mini-
@@ -43,6 +58,16 @@ class LinearPredictor(PredictionModel):
         self._update_counter = 0
         self._batch_X = []
         self._batch_y = []
+        self.use_online_grid = use_online_grid
+        if self.use_online_grid:
+            self.param_order = tuple(self.params.keys())
+            self.param_grid = {k: None for k in itertools.product(*self.params.values())}
+            self.param_points = {k: 0 for k in itertools.product(*self.params.values())}
+            self.num_full_online_partials = num_full_online_partials
+            self.save_top_n = save_top_n
+            self.param_cull_cutoff = param_cull_cutoff
+            self.param_cull_plus_percent = param_cull_plus_percent
+            self.param_cull_minus_percent = param_cull_minus_percent
 
     def initial_model_training(self, X_train, y_train) -> None:
         """
@@ -54,7 +79,10 @@ class LinearPredictor(PredictionModel):
         self.X_train_full = self._ensure_column_vector(X_train)
         self.y_train_full = self._ensure_column_vector(y_train)
 
-        self._select_best_model(self._ensure_column_vector(X_train), self._ensure_column_vector(y_train))
+        if self.use_online_grid:
+            self._initial_online_grid(self.X_train_full, self.y_train_full)
+        else:
+            self._select_best_model(self.X_train_full, self.y_train_full)
 
     def predict_task(self, task_features: pd.Series) -> float:
         """
@@ -83,6 +111,9 @@ class LinearPredictor(PredictionModel):
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
         """Accumulate new samples and update the model in mini-batches."""
+        if self.use_online_grid:
+            self._update_online_grid(np.asarray(X_train), y_train)
+            return
         X_col = self._ensure_column_vector(X_train)
         y_col = self._ensure_column_vector([y_train])
 
@@ -170,3 +201,82 @@ class LinearPredictor(PredictionModel):
 
         self.model_error = best_score
         self.regressor = best_model
+
+    # ------------------------------------------------------------------
+    # Online grid-search style training used when ``use_online_grid`` is True
+    # ------------------------------------------------------------------
+
+    def _initial_online_grid(self, X_train, y_train) -> None:
+        self.train_X_scaler = MinMaxScaler()
+        self.train_y_scaler = MinMaxScaler()
+
+        X_scaled = self.train_X_scaler.fit_transform(X_train)
+        y_scaled = self.train_y_scaler.fit_transform(self._ensure_column_vector(y_train))
+
+        scores = []
+        for params in self.param_grid.keys():
+            if self.param_points[params] <= self.param_cull_cutoff:
+                continue
+            model = SGDRegressor(random_state=42, max_iter=1000,
+                                 **{k: v for k, v in zip(self.param_order, params)})
+            model.fit(X_scaled, y_scaled.ravel())
+            self.param_grid[params] = model
+            scores.append((params, model, model.score(X_scaled, y_scaled.ravel())))
+
+        scores.sort(key=lambda x: x[2])
+
+        for params, _, _ in scores[:min(int(round(len(scores) * self.param_cull_minus_percent)) + 1,
+                                       max(0, len(scores) - self.save_top_n))]:
+            self.param_points[params] -= 1
+
+        for params, _, _ in scores[min(int(round(len(scores) * (1 - self.param_cull_plus_percent))) + 1,
+                                       max(0, len(scores) - self.save_top_n)):]:
+            self.param_points[params] += 1
+
+        _, best_model, best_score = scores[-1]
+        self.model_error = best_score
+        self.regressor = best_model
+        helper.log_if_verbose(f"Best Score for LinearRegressor: {best_score}")
+
+    def _update_online_grid(self, X_train: np.ndarray, y_train: float) -> None:
+        self.X_train_full = np.concatenate((self.X_train_full, [X_train]))
+        self.y_train_full = np.concatenate((self.y_train_full, np.array([y_train]).reshape(-1, 1)))
+
+        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
+        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
+
+        transformed_X = self.train_X_scaler.transform(self.X_train_full)
+        transformed_y = self.train_y_scaler.transform(self.y_train_full).ravel()
+
+        scores = []
+        for params, model in self.param_grid.items():
+            if self.param_points[params] <= self.param_cull_cutoff:
+                continue
+            model.partial_fit(self.train_X_scaler.transform(np.array(X_train).reshape(1, -1)),
+                              self.train_y_scaler.transform(np.array([y_train]).reshape(1, -1)))
+            early_quitting = [model.score(transformed_X, transformed_y)]
+            for _ in range(self.num_full_online_partials):
+                model.partial_fit(self.train_X_scaler.transform(self.X_train_full),
+                                  self.train_y_scaler.transform(self.y_train_full).ravel())
+                early_quitting.append(model.score(transformed_X, transformed_y))
+                if len(early_quitting) >= 12:
+                    if sum(helper.nth_deltas(early_quitting, 2, 10)) >= -1e-4:
+                        break
+            self.param_grid[params] = model
+            scores.append((params, model, model.score(transformed_X, transformed_y)))
+
+        scores.sort(key=lambda x: x[2])
+
+        for params, _, _ in scores[:min(int(round(len(scores) * self.param_cull_minus_percent)) + 1,
+                                       max(0, len(scores) - self.save_top_n))]:
+            self.param_points[params] -= 1
+
+        for params, _, _ in scores[min(int(round(len(scores) * (1 - self.param_cull_plus_percent))) + 1,
+                                       max(0, len(scores) - self.save_top_n)):]:
+            self.param_points[params] += 1
+
+        _, best_model, best_score = scores[-1]
+        self.model_error = best_score
+        self.regressor = best_model
+        helper.log_if_verbose(f"Best Score for LinearRegressor: {best_score}")
+
