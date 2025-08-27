@@ -88,16 +88,13 @@ class Sizey(PredictionMethod):
             triggered. ``None`` or ``0`` disables the periodic refresh.
         """
         self.linearPredictor = LinearPredictor(workflow_name="Test", task_name="Test", err_metr=error_metric,
-                                               batch_size=batch_size, retrain_interval=retrain_interval, use_online_grid=use_online_grid)
+                                               use_online_grid=use_online_grid)
         self.neuralNetworkPredictor = NeuralNetworkPredictor(workflow_name="Test", task_name="Test",
-                                                             err_metr=error_metric, batch_size=batch_size,
-                                                             retrain_interval=retrain_interval, use_online_grid=use_online_grid)
+                                                             err_metr=error_metric, use_online_grid=use_online_grid)
         self.randomForestPredictor = RandomForestPredictor(workflow_name="Test", task_name="Test",
-                                                           err_metr=error_metric,
-                                                           retrain_interval=retrain_interval, use_online_grid=use_online_grid)
+                                                           err_metr=error_metric, use_online_grid=use_online_grid)
         self.knnPredictor = KNNPredictor(workflow_name="Test", task_name="Test",
-                                         err_metr=error_metric,
-                                         retrain_interval=retrain_interval, use_online_grid=use_online_grid)
+                                         err_metr=error_metric, use_online_grid=use_online_grid)
         y_train = np.asarray(y_train).ravel()
         self._initial_model_training(X_train, y_train)
         self.alpha = alpha

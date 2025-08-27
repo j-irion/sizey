@@ -1,11 +1,9 @@
 import numpy as np
 import pandas as pd
-import logging
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import cross_val_score, LeaveOneOut, GridSearchCV
-from sklearn.neural_network import MLPRegressor
+from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
 from warnings import simplefilter
 from sklearn.exceptions import ConvergenceWarning
@@ -15,10 +13,6 @@ from approach.abstract_predictor import PredictionModel
 from approach import helper
 
 simplefilter("ignore", category=ConvergenceWarning)
-
-# Number of estimators to add at each incremental update
-ESTIMATOR_STEP = 5
-
 
 class RandomForestPredictor(PredictionModel):
     """
@@ -36,10 +30,6 @@ class RandomForestPredictor(PredictionModel):
         model_error (float): Error score of the best model.
         best_params (dict): Hyperparameters of the selected model.
         err_metr (str): Error metric used for model selection.
-
-    During updates the existing ``RandomForestRegressor`` is trained
-    incrementally. The scalers are updated with ``partial_fit`` and the
-    regressor grows by ``ESTIMATOR_STEP`` trees using ``warm_start``.
     """
 
     params = {
@@ -51,17 +41,14 @@ class RandomForestPredictor(PredictionModel):
     }
 
     def __init__(self, workflow_name: str, task_name: str, err_metr: str,
-                 retrain_interval: int | None = None,
                  use_online_grid: bool = False,
                  num_full_online_partials: int = 10,
                  save_top_n: int = 10,
                  param_cull_cutoff: int = -5,
                  param_cull_plus_percent: float = 0.3,
                  param_cull_minus_percent: float = 0.3):
-        """Initialize the predictor and configure periodic re-training."""
+        """Initialize the predictor."""
         super().__init__(workflow_name, task_name, err_metr)
-        self.retrain_interval = retrain_interval or 0
-        self._update_counter = 0
         self.use_online_grid = use_online_grid
         if self.use_online_grid:
             self.param_order = tuple(self.params.keys())
@@ -115,13 +102,7 @@ class RandomForestPredictor(PredictionModel):
         return self.train_y_scaler.inverse_transform(self._ensure_column_vector(preds))
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
-        """
-        Incrementally updates the model using ``warm_start``.
-
-        The new sample is appended to the historical data and the scalers are
-        updated via ``partial_fit``. The existing regressor grows by
-        ``ESTIMATOR_STEP`` trees and is fitted on the scaled full dataset without
-        running grid search again.
+        """Update the model with a new training sample.
 
         :param X_train: New training features.
         :param y_train: New training labels.
@@ -133,26 +114,11 @@ class RandomForestPredictor(PredictionModel):
         X_col = self._ensure_column_vector(X_train)
         y_col = self._ensure_column_vector([y_train])
 
-        # Keep full history for evaluation only
         self.X_train_full = np.concatenate((self.X_train_full, X_col))
         self.y_train_full = np.concatenate((self.y_train_full, y_col))
 
-        # Update scalers with new sample
-        self.train_X_scaler.partial_fit(X_col)
-        self.train_y_scaler.partial_fit(y_col)
-
-        X_scaled = self.train_X_scaler.transform(self.X_train_full)
-        y_scaled = self.train_y_scaler.transform(self.y_train_full).ravel()
-
-        # Grow the forest incrementally
-        self.regressor.warm_start = True
-        self.regressor.n_estimators += ESTIMATOR_STEP
-        self.regressor.fit(X_scaled, y_scaled)
-
-        self._update_counter += 1
-        if self.retrain_interval and self._update_counter % self.retrain_interval == 0:
-            # Re-run full grid search to refresh hyperparameters
-            self._selectBestModel(self.X_train_full, self.y_train_full)
+        # Refit scalers and model on the complete dataset
+        self._selectBestModel(self.X_train_full, self.y_train_full)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
         """

@@ -21,12 +21,6 @@ class ClusteringPredictor(PredictionModel):
         regressor (MiniBatchKMeans): Trained clustering model.
     """
 
-    def __init__(self, workflow_name: str, task_name: str, err_metr: str,
-                 retrain_interval: int | None = None):
-        super().__init__(workflow_name, task_name, err_metr)
-        self.retrain_interval = retrain_interval or 0
-        self._update_counter = 0
-
     def initial_model_training(self, X_train, y_train) -> None:
         """
         Initializes the model with training data using MiniBatchKMeans clustering.
@@ -45,11 +39,7 @@ class ClusteringPredictor(PredictionModel):
         self.X_train_full = self._ensure_column_vector(X_train)
         self.y_train_full = self._ensure_column_vector(y_train)
 
-        # Store the MiniBatchKMeans instance so that it can be incrementally
-        # updated with ``partial_fit`` later on.
-        self.regressor = MiniBatchKMeans()
-        self.regressor.fit(X_train_scaled)
-        self.initial_regressor = self.regressor
+        self.regressor = MiniBatchKMeans().fit(X_train_scaled, y_train_scaled)
 
     def predict_task(self, task_features: pd.Series) -> float:
         """
@@ -82,23 +72,14 @@ class ClusteringPredictor(PredictionModel):
         :param X_train: New training features.
         :param y_train: New training labels.
         """
-        X_col = self._ensure_column_vector(X_train)
-        y_col = self._ensure_column_vector([y_train])
+        # Append the newly incoming data to maintain all historical data
+        self.X_train_full = np.concatenate((self.X_train_full, self._ensure_column_vector(X_train)))
+        self.y_train_full = np.concatenate((self.y_train_full, self._ensure_column_vector([y_train])))
 
-        # Keep history only for evaluation purposes
-        self.X_train_full = np.concatenate((self.X_train_full, X_col))
-        self.y_train_full = np.concatenate((self.y_train_full, y_col))
+        # Scaling of data with all historical data
+        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
+        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
 
-        # Incrementally update scalers and clustering model
-        self.train_X_scaler.partial_fit(X_col)
-        self.train_y_scaler.partial_fit(y_col)
-
-        X_scaled = self.train_X_scaler.transform(X_col)
-        self.regressor.partial_fit(X_scaled)
-
-        self._update_counter += 1
-        if self.retrain_interval and self._update_counter % self.retrain_interval == 0:
-            # Refit clustering model on all accumulated data
-            X_full_scaled = self.train_X_scaler.transform(self.X_train_full)
-            self.regressor = MiniBatchKMeans()
-            self.regressor.fit(X_full_scaled)
+        # Retrain existing model with scaled data
+        self.regressor.fit(self.train_X_scaler.transform(self.X_train_full),
+                           self.train_y_scaler.transform(self.y_train_full))

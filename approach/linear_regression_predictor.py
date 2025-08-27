@@ -1,25 +1,23 @@
+import itertools
 import numpy as np
 import pandas as pd
-import logging
 
-from sklearn.linear_model import SGDRegressor
+from sklearn.linear_model import LinearRegression, SGDRegressor
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import GridSearchCV
-import itertools
-
-from approach import helper
 from sklearn.preprocessing import MinMaxScaler
 
+from approach import helper
 from approach.abstract_predictor import PredictionModel
 
 
 class LinearPredictor(PredictionModel):
-    """
-    LinearPredictor is a class that implements a regression model using ``SGDRegressor``
+    """Linear regression predictor with optional online grid search.
 
-    This class extends the ``PredictionModel`` base class and provides methods for training, predicting and
-    incrementally updating the model. It also includes functionality for selecting the best hyperparameters
-    using cross validation.
+    The default behaviour mirrors the original implementation where the model is
+    fully retrained on *all* available data whenever new samples arrive.  When
+    ``use_online_grid`` is enabled an online grid-search style training using
+    ``SGDRegressor`` is performed instead.
 
     Attributes:
         X_train_full (np.ndarray): Historical training features.
@@ -38,26 +36,15 @@ class LinearPredictor(PredictionModel):
     }
 
     def __init__(self, workflow_name: str, task_name: str, err_metr: str,
-                 batch_size: int = 1, retrain_interval: int | None = None,
                  use_online_grid: bool = False,
                  num_full_online_partials: int = 10,
                  save_top_n: int = 10,
                  param_cull_cutoff: int = -5,
                  param_cull_plus_percent: float = 0.3,
                  param_cull_minus_percent: float = 0.3):
-        """Initialize the predictor.
 
-        ``batch_size`` controls after how many samples the accumulated mini-
-        batch is used for ``partial_fit``. ``retrain_interval`` defines after how
-        many mini-batches a full re-training of the model should be triggered.
-        When ``None`` or ``0`` no periodic re-training is performed.
-        """
+        """Initialize the predictor."""
         super().__init__(workflow_name, task_name, err_metr)
-        self.batch_size = batch_size
-        self.retrain_interval = retrain_interval or 0
-        self._update_counter = 0
-        self._batch_X = []
-        self._batch_y = []
         self.use_online_grid = use_online_grid
         if self.use_online_grid:
             self.param_order = tuple(self.params.keys())
@@ -70,14 +57,13 @@ class LinearPredictor(PredictionModel):
             self.param_cull_minus_percent = param_cull_minus_percent
 
     def initial_model_training(self, X_train, y_train) -> None:
-        """
-        Initializes the SGD regression model with training data.
+        """Initialize the regression model with training data.
 
         :param X_train: Training features.
         :param y_train: Training labels.
         """
-        self.X_train_full = self._ensure_column_vector(X_train)
-        self.y_train_full = self._ensure_column_vector(y_train)
+        self.X_train_full = X_train
+        self.y_train_full = y_train
 
         if self.use_online_grid:
             self._initial_online_grid(self.X_train_full, self.y_train_full)
@@ -85,8 +71,7 @@ class LinearPredictor(PredictionModel):
             self._select_best_model(self.X_train_full, self.y_train_full)
 
     def predict_task(self, task_features: pd.Series) -> float:
-        """
-        Predicts the output for multiple tasks using the trained SGD regression model.
+        """Predict the output for a single task.
 
         :param task_features: Features of the task to predict.
 
@@ -97,8 +82,7 @@ class LinearPredictor(PredictionModel):
         return self.train_y_scaler.inverse_transform(self._ensure_column_vector(preds))
 
     def predict_tasks(self, taskDataframe: pd.DataFrame) -> np.ndarray:
-        """
-        Predicts the output for multiple tasks using the trained SGD regression model.
+        """Predict the output for multiple tasks.
 
         :param taskDataframe: DataFrame containing features of multiple tasks.
 
@@ -110,42 +94,20 @@ class LinearPredictor(PredictionModel):
         return self.train_y_scaler.inverse_transform(self._ensure_column_vector(preds))
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
-        """Accumulate new samples and update the model in mini-batches."""
+        """Update the model with a new sample."""
         if self.use_online_grid:
             self._update_online_grid(np.asarray(X_train), y_train)
             return
-        X_col = self._ensure_column_vector(X_train)
-        y_col = self._ensure_column_vector([y_train])
+        # Append new data to history
+        self.X_train_full = np.concatenate((self.X_train_full, [np.asarray(X_train)]))
+        self.y_train_full = np.concatenate((self.y_train_full, np.array([y_train]).reshape(-1, 1)))
 
-        self._batch_X.append(X_col)
-        self._batch_y.append(y_col)
+        # Refit scalers on complete history
+        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
+        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
 
-        if len(self._batch_X) < self.batch_size:
-            return
-
-        X_batch = np.vstack(self._batch_X)
-        y_batch = np.vstack(self._batch_y)
-        self._batch_X.clear()
-        self._batch_y.clear()
-
-        # Keep history for evaluation only
-        self.X_train_full = np.concatenate((self.X_train_full, X_batch))
-        self.y_train_full = np.concatenate((self.y_train_full, y_batch))
-
-        # Update scalers with the mini-batch
-        self.train_X_scaler.partial_fit(X_batch)
-        self.train_y_scaler.partial_fit(y_batch)
-
-        X_scaled = self.train_X_scaler.transform(X_batch)
-        y_scaled = self.train_y_scaler.transform(y_batch).ravel()
-
-        # Incrementally update the regressor on the whole mini-batch
-        self.regressor.partial_fit(X_scaled, y_scaled)
-
-        self._update_counter += 1
-        if self.retrain_interval and self._update_counter % self.retrain_interval == 0:
-            # Re-run full training to refresh weights similar to the initial grid-search
-            self._select_best_model(self.X_train_full, self.y_train_full)
+        # Full retraining on all data
+        self._select_best_model(self.X_train_full, self.y_train_full)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
         """
@@ -164,10 +126,7 @@ class LinearPredictor(PredictionModel):
         return np.mean(mape)
 
     def _select_best_model(self, X_train, y_train):
-        """
-        Fit an ``SGDRegressor`` using grid search to select the best hyperparameters.
-
-        This method is executed only once during initial training.
+        """Fit a ``LinearRegression`` model via cross-validation.
 
         :param X_train: Training features.
         :param y_train: Training labels.
@@ -181,10 +140,9 @@ class LinearPredictor(PredictionModel):
 
         smoothed_mape_scorer = make_scorer(self.smoothed_mape, greater_is_better=True)
 
-        param_grid = {
-        }
+        param_grid = {}
 
-        model = SGDRegressor(random_state=42, max_iter=1000)
+        model = LinearRegression()
 
         if self.err_metr == 'smoothed_mape':
             grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=10, error_score="raise", n_jobs=-1,

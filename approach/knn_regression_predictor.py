@@ -1,30 +1,29 @@
+import itertools
 import numpy as np
 import pandas as pd
-import logging
 
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import cross_val_score, LeaveOneOut, GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KNeighborsRegressor
-from sklearn.neural_network import MLPRegressor
-import itertools
 
-from approach import helper
 from sklearn.preprocessing import MinMaxScaler
 from warnings import simplefilter
 from sklearn.exceptions import ConvergenceWarning
 
+from approach import helper
 from approach.abstract_predictor import PredictionModel
 
 simplefilter("ignore", category=ConvergenceWarning)
 
 
 class KNNPredictor(PredictionModel):
-    """
-    KNNPredictor is a class that implements a machine learning model for regression tasks using K-Nearest Neighbors (KNN).
+    """K-Nearest Neighbour regressor with optional online grid search.
 
-    This class extends the `PredictionModel` base class and provides methods for training, predicting, updating,
-    and selecting the best KNN model based on specified error metrics. It also includes functionality for scaling
-    features and labels, as well as calculating custom error metrics.
+    By default the model mirrors the original implementation and performs a full
+    re-training on *all* historical data whenever a new sample is added.  When
+    ``use_online_grid`` is enabled an online grid-search style procedure keeps a
+    pool of ``KNeighborsRegressor`` instances and updates them on every new
+    sample.
 
     Attributes:
         X_train_full (np.ndarray): Historical training features.
@@ -44,7 +43,6 @@ class KNNPredictor(PredictionModel):
     }
 
     def __init__(self, workflow_name: str, task_name: str, err_metr: str,
-                 retrain_interval: int | None = None,
                  use_online_grid: bool = False,
                  num_full_online_partials: int = 10,
                  save_top_n: int = 10,
@@ -52,8 +50,6 @@ class KNNPredictor(PredictionModel):
                  param_cull_plus_percent: float = 0.3,
                  param_cull_minus_percent: float = 0.3):
         super().__init__(workflow_name, task_name, err_metr)
-        self.retrain_interval = retrain_interval or 0
-        self._update_counter = 0
         self.use_online_grid = use_online_grid
         if self.use_online_grid:
             self.param_order = tuple(self.params.keys())
@@ -107,13 +103,7 @@ class KNNPredictor(PredictionModel):
         return self.train_y_scaler.inverse_transform(self._ensure_column_vector(preds))
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
-        """
-        Incrementally updates the model with a new training sample.
-
-        The new data is appended to ``X_train_full`` and ``y_train_full``. The
-        existing scalers are updated via ``partial_fit`` and the regressor,
-        configured with ``best_params``, is fitted on the scaled full dataset
-        without running grid search again.
+        """Update the model with a new sample.
 
         :param X_train: New training features.
         :param y_train: New training labels.
@@ -125,25 +115,13 @@ class KNNPredictor(PredictionModel):
         X_col = self._ensure_column_vector(X_train)
         y_col = self._ensure_column_vector([y_train])
 
-        # Keep full history for evaluation only
         self.X_train_full = np.concatenate((self.X_train_full, X_col))
         self.y_train_full = np.concatenate((self.y_train_full, y_col))
 
-        # Incrementally update scalers with the new sample
-        self.train_X_scaler.partial_fit(X_col)
-        self.train_y_scaler.partial_fit(y_col)
+        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
+        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
 
-        X_scaled = self.train_X_scaler.transform(self.X_train_full)
-        y_scaled = self.train_y_scaler.transform(self.y_train_full).ravel()
-
-        # Refit the regressor on the entire dataset using stored best parameters
-        self.regressor = KNeighborsRegressor(**self.best_params)
-        self.regressor.fit(X_scaled, y_scaled)
-
-        self._update_counter += 1
-        if self.retrain_interval and self._update_counter % self.retrain_interval == 0:
-            # Refresh hyperparameters through grid search
-            self._selectBestModel(self.X_train_full, self.y_train_full)
+        self._selectBestModel(self.X_train_full, self.y_train_full)
 
     def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
         """
@@ -181,11 +159,7 @@ class KNNPredictor(PredictionModel):
 
         smoothed_mape_scorer = make_scorer(self.smoothed_mape, greater_is_better=True)
 
-        param_grid = {
-            'n_neighbors': [2, 3, 5, 7, 9],
-            'weights': ['uniform', 'distance'],
-            'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute']
-        }
+        param_grid = self.params
 
         model = KNeighborsRegressor()
 
@@ -204,7 +178,6 @@ class KNNPredictor(PredictionModel):
         best_model = grid_search.best_estimator_
 
         self.model_error = best_score
-        self.best_params = grid_search.best_params_
         self.regressor = best_model
 
     # ------------------------------------------------------------------
