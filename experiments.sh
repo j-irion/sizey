@@ -15,8 +15,6 @@ ALPHAS=("0.0" "0.25" "0.5" "0.75" "1.0")
 SOFTMAX=("True" "False")
 SEEDS=("1001" "1111" "1234" "1996" "2024")   # five fixed 4-digit seeds
 ERROR_METRIC="smoothed_mape"
-BATCH_SIZE="4"
-RETRAIN_INTERVAL="20"
 
 LOG_DIR="sweep_logs"
 mkdir -p "$LOG_DIR"
@@ -41,7 +39,7 @@ run_one () {
 
   echo ">>> Running: ${file}, alpha=${alpha}, softmax=${softmax}, seed=${seed}, ${grid_tag}"
   /usr/bin/time -f "Run time: %E (elapsed), %U (user), %S (sys)" \
-    python main.py "${DATA_DIR}/${file}" "${alpha}" "${softmax}" "${ERROR_METRIC}" "${seed}" "${BATCH_SIZE}" "${RETRAIN_INTERVAL}" ${use_grid_flag} \
+    python main.py "${DATA_DIR}/${file}" "${alpha}" "${softmax}" "${ERROR_METRIC}" "${seed}" ${use_grid_flag} \
     >"$log_file" 2>&1
 }
 
