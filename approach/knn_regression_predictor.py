@@ -112,11 +112,9 @@ class KNNPredictor(PredictionModel):
             self._update_online_grid(np.asarray(X_train), y_train)
             return
 
-        X_col = self._ensure_column_vector(X_train)
-        y_col = self._ensure_column_vector([y_train])
-
-        self.X_train_full = np.concatenate((self.X_train_full, X_col))
-        self.y_train_full = np.concatenate((self.y_train_full, y_col))
+        # Append the newly incoming data to maintain all historical data
+        self.X_train_full = np.concatenate((self.X_train_full, self._ensure_column_vector(X_train)))
+        self.y_train_full = np.concatenate((self.y_train_full, self._ensure_column_vector([y_train])))
 
         self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
         self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
@@ -159,7 +157,11 @@ class KNNPredictor(PredictionModel):
 
         smoothed_mape_scorer = make_scorer(self.smoothed_mape, greater_is_better=True)
 
-        param_grid = self.params
+        param_grid = {
+            "n_neighbors": [2, 3, 5, 7, 9],
+            "weights": ["uniform", "distance"],
+            "algorithm": ["auto", "ball_tree", "kd_tree", "brute"],
+        }
 
         model = KNeighborsRegressor()
 

@@ -114,11 +114,16 @@ class NeuralNetworkPredictor(PredictionModel):
             self._update_online_grid(np.asarray(X_train), y_train)
             return
 
-        X_col = self._ensure_column_vector(X_train)
-        y_col = self._ensure_column_vector([y_train])
+        self.X_train_full = np.concatenate(
+            (self.X_train_full, self._ensure_column_vector(X_train))
+        )
+        self.y_train_full = np.concatenate(
+            (self.y_train_full, self._ensure_column_vector([y_train]))
+        )
 
-        self.X_train_full = np.concatenate((self.X_train_full, X_col))
-        self.y_train_full = np.concatenate((self.y_train_full, y_col))
+        # Scaling of data with all historical data
+        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
+        self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
 
         # Refit scalers and retrain model on all available data
         self._selectBestModel(self.X_train_full, self.y_train_full)

@@ -362,7 +362,7 @@ class LinearModel:
                                                                                             self.min_allocation)
 
 
-def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float, use_softmax: bool, batch_size: int, retrain_interval: int, use_online_grid: bool):
+def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float, use_softmax: bool, use_online_grid: bool):
     """
     Main function to compute wastage-minimizing first allocations for tasks in a workflow.
 
@@ -403,7 +403,7 @@ def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float,
 
                             if check_substring_in_csv(workflow, alpha, use_softmax_single, error_metric, "Witt-Ice", task,
                                                    "Default",
-                                                   "Default", seed, batch_size, retrain_interval, use_online_grid):
+                                                   "Default", seed, use_online_grid):
                                 continue
 
                             REL_TTF = 1.0
@@ -444,7 +444,7 @@ def main_witt_wastage(workflow: str, seed: int, error_metric: str, alpha: float,
                                                          row["first_allocation"], len(row["Predictions"])-1, alpha, row["realtime"], len(row["Predictions"])-1, seed)
 
                             write_result_to_csv("Witt-Ice", "Default", "Default", task, w.wastage_GB, w.wastage_GBh,
-                                                w.failures, w.runtime_h, "1", workflow, time_needed, "1.0", alpha, use_softmax_single, {}, error_metric, "-1", seed, batch_size, retrain_interval, use_online_grid)
+                                                w.failures, w.runtime_h, "1", workflow, time_needed, "1.0", alpha, use_softmax_single, {}, error_metric, "-1", seed, use_online_grid)
 
         #training.plot.scatter(x='input_size', y='rss')
         #import matplotlib.pyplot as plt

@@ -311,10 +311,6 @@ if __name__ == "__main__":
     parser.add_argument("error_metric", choices=["smoothed_mape", "neg_mean_squared_error"],
                         help="Error metric for model training")
     parser.add_argument("seed", type=int, help="Random seed for train/test split")
-    parser.add_argument("batch_size", type=int, nargs="?", default=1,
-                        help="Batch size for model training")
-    parser.add_argument("retrain_interval", type=int, nargs="?", default=0,
-                        help="Mini-batch updates after which to re-train the model")
     parser.add_argument("--use_online_grid", action="store_true",
                         help="Use online grid search for hyperparameter tuning")
     args = parser.parse_args()

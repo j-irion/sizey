@@ -62,13 +62,13 @@ class LinearPredictor(PredictionModel):
         :param X_train: Training features.
         :param y_train: Training labels.
         """
-        self.X_train_full = X_train
-        self.y_train_full = y_train
+        self.X_train_full = self._ensure_column_vector(X_train)
+        self.y_train_full = self._ensure_column_vector(y_train)
 
         if self.use_online_grid:
             self._initial_online_grid(self.X_train_full, self.y_train_full)
         else:
-            self._select_best_model(self.X_train_full, self.y_train_full)
+            self._select_best_model(self._ensure_column_vector(X_train), self._ensure_column_vector(y_train))
 
     def predict_task(self, task_features: pd.Series) -> float:
         """Predict the output for a single task.
@@ -99,8 +99,12 @@ class LinearPredictor(PredictionModel):
             self._update_online_grid(np.asarray(X_train), y_train)
             return
         # Append new data to history
-        self.X_train_full = np.concatenate((self.X_train_full, [np.asarray(X_train)]))
-        self.y_train_full = np.concatenate((self.y_train_full, np.array([y_train]).reshape(-1, 1)))
+        self.X_train_full = np.concatenate(
+            (self.X_train_full, self._ensure_column_vector(X_train))
+        )
+        self.y_train_full = np.concatenate(
+            (self.y_train_full, self._ensure_column_vector([y_train]))
+        )
 
         # Refit scalers on complete history
         self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
